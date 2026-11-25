@@ -17,7 +17,8 @@ data class CabinPreferencesState(
     val batteryGuardThresholdPercent: Int = 15,
     val subtitleStyle: SubtitleStyleConfig = SubtitleStyleConfig(),
     val autoPlayNext: Boolean = true,
-    val phoneRemoteModePreferred: Boolean = true
+    val phoneRemoteModePreferred: Boolean = true,
+    val orientationLock: OrientationLockMode = OrientationLockMode.AUTO
 )
 
 data class WidgetResumeSnapshot(
@@ -42,7 +43,8 @@ class DriveCastPreferences(private val context: Context) {
                 colorPreset = SubtitleColorPreset.fromRaw(prefs[KEY_SUB_COLOR])
             ),
             autoPlayNext = prefs[KEY_AUTO_PLAY_NEXT] ?: true,
-            phoneRemoteModePreferred = prefs[KEY_PHONE_REMOTE_PREFERRED] ?: true
+            phoneRemoteModePreferred = prefs[KEY_PHONE_REMOTE_PREFERRED] ?: true,
+            orientationLock = OrientationLockMode.fromRaw(prefs[KEY_ORIENTATION_LOCK])
         )
     }
 
@@ -68,6 +70,10 @@ class DriveCastPreferences(private val context: Context) {
 
     suspend fun setPhoneRemoteModePreferred(enabled: Boolean) {
         appContext.driveCastDataStore.edit { it[KEY_PHONE_REMOTE_PREFERRED] = enabled }
+    }
+
+    suspend fun setOrientationLock(mode: OrientationLockMode) {
+        appContext.driveCastDataStore.edit { it[KEY_ORIENTATION_LOCK] = mode.name }
     }
 
     fun saveWidgetSnapshot(snapshot: WidgetResumeSnapshot) {
@@ -98,6 +104,7 @@ class DriveCastPreferences(private val context: Context) {
         private val KEY_SUB_COLOR = stringPreferencesKey("subtitle_color_preset")
         private val KEY_AUTO_PLAY_NEXT = booleanPreferencesKey("auto_play_next")
         private val KEY_PHONE_REMOTE_PREFERRED = booleanPreferencesKey("phone_remote_mode_preferred")
+        private val KEY_ORIENTATION_LOCK = stringPreferencesKey("orientation_lock_mode")
 
         private const val WIDGET_PREFS_NAME = "drivecast_widget_prefs"
         private const val W_KEY_VIDEO_ID = "video_id"

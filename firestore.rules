@@ -35,7 +35,7 @@ service cloud.firestore {
              data.audioTrackIndex is int && data.audioTrackIndex >= -1 && data.audioTrackIndex <= 64 &&
              data.subtitleTrackIndex is int && data.subtitleTrackIndex >= -1 && data.subtitleTrackIndex <= 64 &&
              (data.playbackSpeed is int || data.playbackSpeed is float) && data.playbackSpeed >= 0.25 && data.playbackSpeed <= 4.0 &&
-             data.aspectMode in ['FIT', 'FILL', 'ZOOM'] &&
+             data.aspectMode in ['FIT', 'FILL', 'ZOOM', 'ULTRAWIDE_21_9', 'STRETCH'] &&
              data.cachedOffline is bool &&
              data.mimeType is string && data.mimeType.size() <= 100 &&
              data.resolutionLabel is string && data.resolutionLabel.size() <= 50 &&
@@ -66,6 +66,13 @@ service cloud.firestore {
              data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
              data.videoIds is list && data.videoIds.size() <= 100 &&
              (data.videoIds.size() == 0 || (data.videoIds[0] is string && data.videoIds[0].size() >= 1 && data.videoIds[0].size() <= 128));
+    }
+
+    function isValidBookmark(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.videoId is string && data.videoId.size() >= 1 && data.videoId.size() <= 128 &&
+             data.label is string && data.label.size() >= 1 && data.label.size() <= 60 &&
+             data.positionMs is int && data.positionMs >= 0 && data.positionMs <= 86400000;
     }
 
     match /users/{userId}/videos/{videoId} {
@@ -213,6 +220,36 @@ service cloud.firestore {
                        incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
                        incoming().diff(existing()).affectedKeys().hasOnly([
                          'name', 'videoIds', 'updatedAt'
+                       ]);
+    }
+
+    match /users/{userId}/bookmarks/{bookmarkId} {
+      allow list: if isOwner(userId);
+      allow get, delete: if isOwner(userId) && isValidId(bookmarkId);
+
+      allow create: if isOwner(userId) &&
+                       isValidId(bookmarkId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'videoId', 'label', 'positionMs', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'videoId', 'label', 'positionMs', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().createdAt is timestamp && incoming().createdAt <= request.time &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       isValidBookmark(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidBookmark(incoming()) &&
+                       request.auth.uid == userId &&
+                       isValidId(bookmarkId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().videoId == existing().videoId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'label', 'positionMs', 'updatedAt'
                        ]);
     }
   }

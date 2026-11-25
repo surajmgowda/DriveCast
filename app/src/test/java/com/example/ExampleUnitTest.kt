@@ -2,10 +2,12 @@ package com.example
 
 import com.example.car.CabinUtilityManager
 import com.example.data.AspectMode
+import com.example.data.OrientationLockMode
 import com.example.data.QualityProfile
 import com.example.data.SubtitleColorPreset
 import com.example.data.SyncRepository
 import com.example.player.AudioEqualizerEngine
+import com.example.player.ExternalSubtitleParser
 import com.example.safety.SafetyGateManager
 import com.example.sink.SinkType
 import com.example.sink.VideoSinkRouter
@@ -114,5 +116,43 @@ class ExampleUnitTest {
     fun countdownFormatting_formatsMinutesAndHours() {
         assertEquals("15:00", formatCountdownSeconds(900))
         assertEquals("1:05:09", formatCountdownSeconds(3909))
+    }
+
+    @Test
+    fun externalSubtitleParser_parsesSrtAndVttWithSyncOffset() {
+        val srt = """
+            1
+            00:00:05,000 --> 00:00:08,500
+            <i>Plugged into MG fast charger</i>
+
+            2
+            00:00:10,000 --> 00:00:12,000
+            Ready to watch
+        """.trimIndent()
+        val srtCues = ExternalSubtitleParser.parse(srt)
+        assertEquals(2, srtCues.size)
+        assertEquals("Plugged into MG fast charger", srtCues[0].text)
+        assertEquals(listOf("Plugged into MG fast charger"), ExternalSubtitleParser.findActiveCueTexts(srtCues, 6000L, 0))
+        assertTrue(ExternalSubtitleParser.findActiveCueTexts(srtCues, 6000L, 2000).isEmpty())
+        assertEquals(listOf("Plugged into MG fast charger"), ExternalSubtitleParser.findActiveCueTexts(srtCues, 7000L, 2000))
+
+        val vtt = """
+            WEBVTT
+
+            00:15.250 --> 00:18.000 align:center
+            Cabin audio locked
+        """.trimIndent()
+        val vttCues = ExternalSubtitleParser.parse(vtt)
+        assertEquals(1, vttCues.size)
+        assertEquals(15250L, vttCues[0].startMs)
+        assertEquals("Cabin audio locked", vttCues[0].text)
+    }
+
+    @Test
+    fun displayAndOrientationEnums_resolveUltrawideAndOrientationModes() {
+        assertEquals(AspectMode.ULTRAWIDE_21_9, AspectMode.fromRaw("ULTRAWIDE_21_9"))
+        assertEquals(AspectMode.STRETCH, AspectMode.fromRaw("STRETCH"))
+        assertEquals(OrientationLockMode.LANDSCAPE, OrientationLockMode.fromRaw("LANDSCAPE"))
+        assertEquals(OrientationLockMode.AUTO, OrientationLockMode.fromRaw("INVALID"))
     }
 }

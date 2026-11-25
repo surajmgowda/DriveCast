@@ -256,3 +256,48 @@ test("Owner can manage custom playlists while cross-user and invalid payloads ar
   await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("playlists").get());
   await assertSucceeds(plRef.delete());
 });
+
+test("Owner can manage video bookmarks and ultrawide aspect modes while cross-user and invalid payloads are denied", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const created = new Date(Date.now() - 10000);
+
+  const vidRef = aliceDb.collection("users").doc(ALICE_UID).collection("videos").doc("vid_ultrawide");
+  await assertSucceeds(vidRef.set(validVideoPayload(ALICE_UID, created)));
+  await assertSucceeds(
+    vidRef.update({
+      aspectMode: "ULTRAWIDE_21_9",
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+
+  const bmRef = aliceDb.collection("users").doc(ALICE_UID).collection("bookmarks").doc("bm_01");
+  await assertSucceeds(
+    bmRef.set({
+      userId: ALICE_UID,
+      videoId: "vid_ultrawide",
+      label: "Fast Charger Peak",
+      positionMs: 145000,
+      createdAt: created,
+      updatedAt: created,
+    })
+  );
+
+  await assertSucceeds(aliceDb.collection("users").doc(ALICE_UID).collection("bookmarks").get());
+  await assertSucceeds(
+    bmRef.update({
+      label: "Highway Scene",
+      positionMs: 160000,
+      updatedAt: new Date(Date.now() - 1000),
+    })
+  );
+
+  await assertFails(
+    bmRef.update({
+      positionMs: -10,
+      updatedAt: new Date(Date.now() - 500),
+    })
+  );
+  await assertFails(bobDb.collection("users").doc(ALICE_UID).collection("bookmarks").get());
+  await assertSucceeds(bmRef.delete());
+});

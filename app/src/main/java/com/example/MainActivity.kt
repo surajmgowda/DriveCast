@@ -4,10 +4,13 @@ import android.Manifest
 import android.app.PendingIntent
 import android.app.PictureInPictureParams
 import android.app.RemoteAction
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.drawable.Icon
 import android.os.Build
@@ -72,6 +75,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.car.BluetoothTransportMonitor
 import com.example.data.DriveCastPreferences
 import com.example.data.LocalMediaLibrary
+import com.example.data.OrientationLockMode
 import com.example.data.SyncRepository
 import com.example.player.PlayerController
 import com.example.player.VideoDeckPlaybackService
@@ -304,6 +308,7 @@ fun VideoDeckAppShell(
 
     val videosState by viewModel.videosState.collectAsStateWithLifecycle()
     val playlistsState by viewModel.playlistsState.collectAsStateWithLifecycle()
+    val bookmarksState by viewModel.bookmarksState.collectAsStateWithLifecycle()
     val eqPresetsState by viewModel.eqPresetsState.collectAsStateWithLifecycle()
     val settingsState by viewModel.settingsState.collectAsStateWithLifecycle()
     val cabinPrefs by viewModel.cabinPrefsState.collectAsStateWithLifecycle()
@@ -354,6 +359,25 @@ fun VideoDeckAppShell(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         uri?.let { viewModel.importFolderTree(it) }
+    }
+
+    val subtitlePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.loadExternalSubtitle(it) }
+    }
+
+    LaunchedEffect(cabinPrefs.orientationLock, isInPipMode) {
+        val act = context.findHostActivity() ?: return@LaunchedEffect
+        act.requestedOrientation = if (isInPipMode) {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } else {
+            when (cabinPrefs.orientationLock) {
+                OrientationLockMode.AUTO -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                OrientationLockMode.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                OrientationLockMode.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+        }
     }
 
     val navController = rememberNavController()
@@ -494,6 +518,7 @@ fun VideoDeckAppShell(
                                     cues = cues,
                                     eqState = eqState,
                                     presetsState = eqPresetsState,
+                                    bookmarksState = bookmarksState,
                                     cabinPrefs = cabinPrefs,
                                     cabinUtility = cabinUtility,
                                     activeAudioRoute = transportState.activeAudioRoute,
@@ -511,6 +536,20 @@ fun VideoDeckAppShell(
                                     },
                                     onUpdateSubtitleStyle = { style ->
                                         viewModel.setSubtitleStyle(style)
+                                    },
+                                    onPickExternalSubtitle = {
+                                        subtitlePickerLauncher.launch(
+                                            arrayOf("application/x-subrip", "text/vtt", "text/plain", "*/*")
+                                        )
+                                    },
+                                    onAddBookmark = { videoId, label, posMs ->
+                                        viewModel.addBookmark(videoId, label, posMs)
+                                    },
+                                    onDeleteBookmark = { bookmarkId ->
+                                        viewModel.deleteBookmark(bookmarkId)
+                                    },
+                                    onSetOrientationLock = { mode ->
+                                        viewModel.setOrientationLock(mode)
                                     },
                                     onSetAutoPlayNext = { enabled ->
                                         viewModel.setAutoPlayNext(enabled)
@@ -590,4 +629,10 @@ fun VideoDeckAppShell(
             }
         }
     }
+}
+
+private tailrec fun Context.findHostActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findHostActivity()
+    else -> null
 }

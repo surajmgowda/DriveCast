@@ -14,10 +14,12 @@ import com.example.data.AspectMode
 import com.example.data.CabinPreferencesState
 import com.example.data.DriveCastPreferences
 import com.example.data.LocalMediaLibrary
+import com.example.data.OrientationLockMode
 import com.example.data.PreferredTransport
 import com.example.data.QualityProfile
 import com.example.data.SubtitleStyleConfig
 import com.example.data.SyncRepository
+import com.example.data.SyncedBookmark
 import com.example.data.SyncedEqPreset
 import com.example.data.SyncedPlaylist
 import com.example.data.SyncedSettings
@@ -53,7 +55,7 @@ sealed interface UiState<out T> {
 }
 
 class VideoDeckViewModel(
-    appContext: Context,
+    private val appContext: Context,
     private val syncRepository: SyncRepository,
     private val localLibrary: LocalMediaLibrary,
     private val transportMonitor: BluetoothTransportMonitor,
@@ -90,6 +92,24 @@ class VideoDeckViewModel(
                 val root = firestoreError ?: error
                 Log.w(TAG, "Error observing playlists", root)
                 emit(UiState.Error(root.message ?: "Failed to sync playlists"))
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000L),
+                initialValue = UiState.Loading
+            )
+
+    val bookmarksState: StateFlow<UiState<List<SyncedBookmark>>> =
+        syncRepository.observeBookmarks(currentUserId)
+            .map<List<SyncedBookmark>, UiState<List<SyncedBookmark>>> { UiState.Success(it) }
+            .catch { error ->
+                val firestoreError = generateSequence(error) { it.cause }
+                    .filterIsInstance<FirebaseFirestoreException>()
+                    .firstOrNull()
+                if (firestoreError == null && error is CancellationException) throw error
+                val root = firestoreError ?: error
+                Log.w(TAG, "Error observing bookmarks", root)
+                emit(UiState.Error(root.message ?: "Failed to sync bookmarks"))
             }
             .stateIn(
                 scope = viewModelScope,
@@ -539,6 +559,51 @@ class VideoDeckViewModel(
 
     fun setPhoneRemoteModePreferred(enabled: Boolean) {
         viewModelScope.launch { preferences.setPhoneRemoteModePreferred(enabled) }
+    }
+
+    fun setOrientationLock(mode: OrientationLockMode) {
+        viewModelScope.launch { preferences.setOrientationLock(mode) }
+    }
+
+    fun loadExternalSubtitle(uri: Uri) {
+        val result = PlayerController.loadExternalSubtitle(appContext, uri)
+        if (result.isSuccess) {
+            _toastMessages.tryEmit("Loaded subtitles: ${result.getOrNull()}")
+        } else {
+            _toastMessages.tryEmit(result.exceptionOrNull()?.localizedMessage ?: "Unsupported subtitle file")
+        }
+    }
+
+    fun addBookmark(videoId: String, label: String, positionMs: Long) {
+        if (videoId.isBlank()) {
+            _toastMessages.tryEmit("Play a synced video before adding bookmarks")
+            return
+        }
+        val safeLabel = label.trim().ifEmpty { "Bookmark" }.take(60)
+        val bookmark = SyncedBookmark(
+            id = SyncRepository.stableDocId("bm_${videoId}_${positionMs}"),
+            userId = currentUserId,
+            videoId = SyncRepository.stableDocId(videoId),
+            label = safeLabel,
+            positionMs = positionMs.coerceIn(0L, 86_400_000L)
+        )
+        viewModelScope.launch {
+            val res = syncRepository.upsertBookmark(bookmark)
+            if (res.isSuccess) {
+                _toastMessages.tryEmit("Saved bookmark \"$safeLabel\"")
+            } else {
+                _toastMessages.tryEmit(res.exceptionOrNull()?.localizedMessage ?: "Bookmark sync failed")
+            }
+        }
+    }
+
+    fun deleteBookmark(bookmarkId: String) {
+        viewModelScope.launch {
+            val res = syncRepository.deleteBookmark(bookmarkId)
+            if (res.isSuccess) {
+                _toastMessages.tryEmit("Bookmark removed")
+            }
+        }
     }
 
     fun startChargingTimer(minutes: Int) = CabinUtilityManager.startChargingTimer(minutes)

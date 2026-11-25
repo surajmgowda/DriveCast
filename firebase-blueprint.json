@@ -39,7 +39,7 @@
         },
         "aspectMode": {
           "type": "string",
-          "enum": ["FIT", "FILL", "ZOOM"],
+          "enum": ["FIT", "FILL", "ZOOM", "ULTRAWIDE_21_9", "STRETCH"],
           "description": "Display scaling mode for phone and car surfaces."
         },
         "cachedOffline": {
@@ -226,6 +226,47 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "SyncedBookmark": {
+      "title": "SyncedBookmark",
+      "description": "Named timestamp bookmark within a video synchronized across devices.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase user UID."
+        },
+        "videoId": {
+          "type": "string",
+          "description": "Target synced video document ID."
+        },
+        "label": {
+          "type": "string",
+          "description": "Bookmark name or chapter label (1 to 60 characters)."
+        },
+        "positionMs": {
+          "type": "integer",
+          "description": "Timestamp position in milliseconds (0 to 86400000)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when bookmark was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when bookmark was last updated."
+        }
+      },
+      "required": [
+        "userId",
+        "videoId",
+        "label",
+        "positionMs",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -252,6 +293,12 @@
         "$ref": "#/entities/SyncedPlaylist"
       },
       "description": "Per-user custom video playlists."
+    },
+    "/users/{userId}/bookmarks/{bookmarkId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedBookmark"
+      },
+      "description": "Per-user saved video timestamp bookmarks."
     }
   }
 }

@@ -76,7 +76,12 @@ data class PlayerUiState(
     val errorMessage: String? = null,
     val playlistSize: Int = 0,
     val currentIndex: Int = 0,
-    val queue: List<SyncedVideoEntry> = emptyList()
+    val queue: List<SyncedVideoEntry> = emptyList(),
+    val externalSubtitleName: String? = null,
+    val externalSubtitleCount: Int = 0,
+    val subtitleOffsetMs: Int = 0,
+    val abLoopStartMs: Long? = null,
+    val abLoopEndMs: Long? = null
 )
 
 /**
@@ -95,6 +100,7 @@ object PlayerController {
     private var mediaController: MediaController? = null
 
     private var currentQueue: MutableList<SyncedVideoEntry> = mutableListOf()
+    private var externalSubtitleCues: List<ExternalSubtitleCue> = emptyList()
     private var onProgressCheckpoint: ((SyncedVideoEntry, Long, Int, Int, Float, AspectMode, Int) -> Unit)? = null
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -177,12 +183,15 @@ object PlayerController {
             }
 
             override fun onCues(cueGroup: CueGroup) {
-                _cuesFlow.value = cueGroup.cues
+                if (externalSubtitleCues.isEmpty()) {
+                    _cuesFlow.value = cueGroup.cues
+                }
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val idx = player.currentMediaItemIndex
                 val entry = currentQueue.getOrNull(idx)
+                externalSubtitleCues = emptyList()
                 _cuesFlow.value = emptyList()
                 _uiState.update {
                     it.copy(
@@ -192,6 +201,10 @@ object PlayerController {
                             ?: entry?.displayName ?: "Video",
                         currentIndex = idx,
                         durationMs = player.duration.coerceAtLeast(0L),
+                        externalSubtitleName = null,
+                        externalSubtitleCount = 0,
+                        abLoopStartMs = null,
+                        abLoopEndMs = null,
                         errorMessage = null
                     )
                 }
@@ -296,6 +309,7 @@ object PlayerController {
             player.play()
         }
 
+        externalSubtitleCues = emptyList()
         _cuesFlow.value = emptyList()
         _uiState.update {
             it.copy(
@@ -308,6 +322,10 @@ object PlayerController {
                 playlistSize = currentQueue.size,
                 currentIndex = safeIdx,
                 queue = currentQueue.toList(),
+                externalSubtitleName = null,
+                externalSubtitleCount = 0,
+                abLoopStartMs = null,
+                abLoopEndMs = null,
                 droppedFrames = 0,
                 errorMessage = null
             )
@@ -433,6 +451,7 @@ object PlayerController {
         val clamped = positionMs.coerceIn(0L, player.duration.coerceAtLeast(0L))
         player.seekTo(clamped)
         _uiState.update { it.copy(positionMs = clamped) }
+        refreshExternalSubtitleCues(clamped)
     }
 
     fun seekBy(deltaMs: Long) {
@@ -464,11 +483,9 @@ object PlayerController {
     }
 
     fun cycleAspectMode() {
-        val next = when (_uiState.value.aspectMode) {
-            AspectMode.FIT -> AspectMode.FILL
-            AspectMode.FILL -> AspectMode.ZOOM
-            AspectMode.ZOOM -> AspectMode.FIT
-        }
+        val all = AspectMode.entries
+        val currentIdx = all.indexOf(_uiState.value.aspectMode).coerceAtLeast(0)
+        val next = all[(currentIdx + 1) % all.size]
         _uiState.update { it.copy(aspectMode = next) }
         emitCheckpoint()
     }
@@ -482,6 +499,84 @@ object PlayerController {
         val clamped = delayMs.coerceIn(-500, 500)
         _uiState.update { it.copy(audioDelayMs = clamped) }
         emitCheckpoint()
+    }
+
+    fun loadExternalSubtitle(context: Context, uri: Uri): Result<String> {
+        return try {
+            val (name, parsed) = ExternalSubtitleParser.loadFromUri(context, uri)
+            if (parsed.isEmpty()) {
+                return Result.failure(IllegalArgumentException("No valid .srt or .vtt cues found in file"))
+            }
+            externalSubtitleCues = parsed
+            boundExoPlayer?.let { player ->
+                player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .build()
+            }
+            _uiState.update {
+                it.copy(
+                    externalSubtitleName = name,
+                    externalSubtitleCount = parsed.size
+                )
+            }
+            val pos = boundExoPlayer?.currentPosition ?: _uiState.value.positionMs
+            refreshExternalSubtitleCues(pos)
+            Result.success("$name (${parsed.size} lines)")
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    fun clearExternalSubtitle() {
+        externalSubtitleCues = emptyList()
+        _cuesFlow.value = emptyList()
+        _uiState.update {
+            it.copy(
+                externalSubtitleName = null,
+                externalSubtitleCount = 0
+            )
+        }
+    }
+
+    fun setSubtitleOffsetMs(offsetMs: Int) {
+        val clamped = offsetMs.coerceIn(-5000, 5000)
+        _uiState.update { it.copy(subtitleOffsetMs = clamped) }
+        val pos = boundExoPlayer?.currentPosition ?: _uiState.value.positionMs
+        refreshExternalSubtitleCues(pos)
+    }
+
+    fun setAbLoopStart() {
+        val pos = (boundExoPlayer?.currentPosition ?: _uiState.value.positionMs).coerceAtLeast(0L)
+        _uiState.update { state ->
+            val keepEnd = state.abLoopEndMs?.takeIf { it > pos + 500L }
+            state.copy(abLoopStartMs = pos, abLoopEndMs = keepEnd)
+        }
+    }
+
+    fun setAbLoopEnd() {
+        val pos = (boundExoPlayer?.currentPosition ?: _uiState.value.positionMs).coerceAtLeast(0L)
+        _uiState.update { state ->
+            val start = state.abLoopStartMs ?: 0L
+            if (pos <= start + 500L) {
+                state
+            } else {
+                state.copy(abLoopStartMs = start, abLoopEndMs = pos)
+            }
+        }
+    }
+
+    fun clearAbLoop() {
+        _uiState.update { it.copy(abLoopStartMs = null, abLoopEndMs = null) }
+    }
+
+    private fun refreshExternalSubtitleCues(positionMs: Long) {
+        if (externalSubtitleCues.isEmpty()) return
+        val texts = ExternalSubtitleParser.findActiveCueTexts(
+            cues = externalSubtitleCues,
+            playbackPositionMs = positionMs,
+            subtitleOffsetMs = _uiState.value.subtitleOffsetMs
+        )
+        _cuesFlow.value = texts.map { line -> Cue.Builder().setText(line).build() }
     }
 
     fun selectAudioTrack(option: TrackOptionUi) {
@@ -499,8 +594,12 @@ object PlayerController {
         val builder = player.trackSelectionParameters.buildUpon()
         if (option == null) {
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-            _cuesFlow.value = emptyList()
+            if (externalSubtitleCues.isEmpty()) {
+                _cuesFlow.value = emptyList()
+            }
         } else {
+            externalSubtitleCues = emptyList()
+            _uiState.update { it.copy(externalSubtitleName = null, externalSubtitleCount = 0) }
             val group = player.currentTracks.groups.getOrNull(option.groupIndex) ?: return
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
             builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, option.trackIndex))
@@ -560,22 +659,36 @@ object PlayerController {
     private fun startTicker() {
         positionTickerJob?.cancel()
         positionTickerJob = scope.launch {
-            var tickCount = 0
+            var elapsedSinceCheckpointMs = 0L
             while (isActive) {
                 val player = boundExoPlayer
+                val currentState = _uiState.value
+                val highFreq = externalSubtitleCues.isNotEmpty() ||
+                    (currentState.abLoopStartMs != null && currentState.abLoopEndMs != null)
+                val stepMs = if (highFreq) 200L else 500L
+
                 if (player != null) {
+                    var pos = player.currentPosition.coerceAtLeast(0L)
+                    val abStart = currentState.abLoopStartMs
+                    val abEnd = currentState.abLoopEndMs
+                    if (abStart != null && abEnd != null && abEnd > abStart && pos >= abEnd) {
+                        player.seekTo(abStart)
+                        pos = abStart
+                    }
+                    refreshExternalSubtitleCues(pos)
                     _uiState.update {
                         it.copy(
-                            positionMs = player.currentPosition.coerceAtLeast(0L),
+                            positionMs = pos,
                             durationMs = player.duration.coerceAtLeast(0L)
                         )
                     }
-                    tickCount++
-                    if (tickCount % 10 == 0) {
+                    elapsedSinceCheckpointMs += stepMs
+                    if (elapsedSinceCheckpointMs >= 5000L) {
+                        elapsedSinceCheckpointMs = 0L
                         emitCheckpoint()
                     }
                 }
-                delay(500L)
+                delay(stepMs)
             }
         }
     }

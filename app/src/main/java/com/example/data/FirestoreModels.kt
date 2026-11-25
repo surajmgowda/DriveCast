@@ -6,14 +6,27 @@ import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.IgnoreExtraProperties
 import com.google.firebase.firestore.ServerTimestamp
 
-enum class AspectMode {
-    FIT,
-    FILL,
-    ZOOM;
+enum class AspectMode(val label: String) {
+    FIT("Fit"),
+    FILL("Fill"),
+    ZOOM("Zoom"),
+    ULTRAWIDE_21_9("21:9 Car"),
+    STRETCH("Stretch");
 
     companion object {
         fun fromRaw(raw: String?): AspectMode =
             entries.firstOrNull { it.name == raw } ?: FIT
+    }
+}
+
+enum class OrientationLockMode(val label: String) {
+    AUTO("Auto"),
+    LANDSCAPE("Landscape"),
+    PORTRAIT("Portrait");
+
+    companion object {
+        fun fromRaw(raw: String?): OrientationLockMode =
+            entries.firstOrNull { it.name == raw } ?: AUTO
     }
 }
 
@@ -97,6 +110,18 @@ data class SyncedPlaylist(
     val userId: String = "",
     val name: String = "",
     val videoIds: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
+data class SyncedBookmark(
+    @DocumentId val id: String = "",
+    val userId: String = "",
+    val videoId: String = "",
+    val label: String = "",
+    val positionMs: Long = 0L,
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )

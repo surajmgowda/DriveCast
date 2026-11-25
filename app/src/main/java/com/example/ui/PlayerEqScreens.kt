@@ -36,17 +36,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.ScreenLockLandscape
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Subtitles
@@ -61,6 +66,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -96,11 +102,14 @@ import androidx.media3.common.text.Cue
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
+import androidx.compose.foundation.layout.requiredSize
 import com.example.R
 import com.example.car.CabinUtilityState
 import com.example.data.AspectMode
 import com.example.data.CabinPreferencesState
+import com.example.data.OrientationLockMode
 import com.example.data.SubtitleStyleConfig
+import com.example.data.SyncedBookmark
 import com.example.data.SyncedEqPreset
 import com.example.player.EqualizerState
 import com.example.player.PlayerController
@@ -121,6 +130,7 @@ fun PlayerCockpitScreen(
     cues: List<Cue>,
     eqState: EqualizerState,
     presetsState: UiState<List<SyncedEqPreset>>,
+    bookmarksState: UiState<List<SyncedBookmark>>,
     cabinPrefs: CabinPreferencesState,
     cabinUtility: CabinUtilityState,
     activeAudioRoute: String,
@@ -131,6 +141,10 @@ fun PlayerCockpitScreen(
     onSaveCustomPreset: (String, List<SyncedEqPreset>) -> Unit,
     onResetFlat: () -> Unit,
     onUpdateSubtitleStyle: (SubtitleStyleConfig) -> Unit,
+    onPickExternalSubtitle: () -> Unit,
+    onAddBookmark: (String, String, Long) -> Unit,
+    onDeleteBookmark: (String) -> Unit,
+    onSetOrientationLock: (OrientationLockMode) -> Unit,
     onSetAutoPlayNext: (Boolean) -> Unit,
     onSetPhoneRemoteMode: (Boolean) -> Unit,
     onStartSleepTimer: (Int) -> Unit,
@@ -143,6 +157,20 @@ fun PlayerCockpitScreen(
     var showTracksDialog by remember { mutableStateOf(false) }
     var showLiveEqSheet by remember { mutableStateOf(false) }
     var showQueueSheet by remember { mutableStateOf(false) }
+    var showBookmarksSheet by remember { mutableStateOf(false) }
+    var isTouchLocked by remember { mutableStateOf(false) }
+
+    val activeVideoBookmarks = remember(bookmarksState, playerState.activeVideoId) {
+        val all = (bookmarksState as? UiState.Success)?.data.orEmpty()
+        val vid = playerState.activeVideoId
+        if (vid.isNullOrBlank()) emptyList() else all.filter { it.videoId == vid }
+    }
+
+    val cycleOrientationLock = {
+        val modes = OrientationLockMode.entries
+        val next = modes[(modes.indexOf(cabinPrefs.orientationLock) + 1) % modes.size]
+        onSetOrientationLock(next)
+    }
 
     if (isInPipMode) {
         VideoSurfaceViewport(
@@ -152,8 +180,12 @@ fun PlayerCockpitScreen(
             cabinUtility = cabinUtility,
             safetyState = safetyState,
             sinkTelemetry = sinkTelemetry,
+            orientationLock = cabinPrefs.orientationLock,
             remoteModeActive = false,
+            isTouchLocked = false,
             isInPipMode = true,
+            onToggleTouchLock = {},
+            onCycleOrientation = {},
             onToggleRemoteMode = {},
             onDismissChargingAlert = {},
             modifier = Modifier.fillMaxSize()
@@ -188,8 +220,12 @@ fun PlayerCockpitScreen(
                         cabinUtility = cabinUtility,
                         safetyState = safetyState,
                         sinkTelemetry = sinkTelemetry,
+                        orientationLock = cabinPrefs.orientationLock,
                         remoteModeActive = remoteModeActive,
+                        isTouchLocked = isTouchLocked,
                         isInPipMode = false,
+                        onToggleTouchLock = { isTouchLocked = !isTouchLocked },
+                        onCycleOrientation = cycleOrientationLock,
                         onToggleRemoteMode = { onSetPhoneRemoteMode(!cabinPrefs.phoneRemoteModePreferred) },
                         onDismissChargingAlert = onDismissChargingAlert,
                         modifier = Modifier.fillMaxSize()
@@ -206,11 +242,17 @@ fun PlayerCockpitScreen(
                         playerState = playerState,
                         eqState = eqState,
                         cabinUtility = cabinUtility,
+                        orientationLock = cabinPrefs.orientationLock,
+                        bookmarks = activeVideoBookmarks,
                         isExternalSink = isExternalSink,
                         remoteModeActive = remoteModeActive,
+                        isTouchLocked = isTouchLocked,
                         onOpenTracks = { showTracksDialog = true },
                         onOpenLiveEq = { showLiveEqSheet = true },
                         onOpenQueue = { showQueueSheet = true },
+                        onOpenBookmarksAndDisplay = { showBookmarksSheet = true },
+                        onToggleTouchLock = { isTouchLocked = !isTouchLocked },
+                        onCycleOrientation = cycleOrientationLock,
                         onEnterPip = onEnterPip,
                         onToggleRemoteMode = { onSetPhoneRemoteMode(!cabinPrefs.phoneRemoteModePreferred) },
                         onOpenDeck = onOpenDeck
@@ -232,8 +274,12 @@ fun PlayerCockpitScreen(
                     cabinUtility = cabinUtility,
                     safetyState = safetyState,
                     sinkTelemetry = sinkTelemetry,
+                    orientationLock = cabinPrefs.orientationLock,
                     remoteModeActive = remoteModeActive,
+                    isTouchLocked = isTouchLocked,
                     isInPipMode = false,
+                    onToggleTouchLock = { isTouchLocked = !isTouchLocked },
+                    onCycleOrientation = cycleOrientationLock,
                     onToggleRemoteMode = { onSetPhoneRemoteMode(!cabinPrefs.phoneRemoteModePreferred) },
                     onDismissChargingAlert = onDismissChargingAlert,
                     modifier = Modifier
@@ -244,11 +290,17 @@ fun PlayerCockpitScreen(
                     playerState = playerState,
                     eqState = eqState,
                     cabinUtility = cabinUtility,
+                    orientationLock = cabinPrefs.orientationLock,
+                    bookmarks = activeVideoBookmarks,
                     isExternalSink = isExternalSink,
                     remoteModeActive = remoteModeActive,
+                    isTouchLocked = isTouchLocked,
                     onOpenTracks = { showTracksDialog = true },
                     onOpenLiveEq = { showLiveEqSheet = true },
                     onOpenQueue = { showQueueSheet = true },
+                    onOpenBookmarksAndDisplay = { showBookmarksSheet = true },
+                    onToggleTouchLock = { isTouchLocked = !isTouchLocked },
+                    onCycleOrientation = cycleOrientationLock,
                     onEnterPip = onEnterPip,
                     onToggleRemoteMode = { onSetPhoneRemoteMode(!cabinPrefs.phoneRemoteModePreferred) },
                     onOpenDeck = onOpenDeck
@@ -262,6 +314,7 @@ fun PlayerCockpitScreen(
             playerState = playerState,
             subtitleStyle = cabinPrefs.subtitleStyle,
             onUpdateSubtitleStyle = onUpdateSubtitleStyle,
+            onPickExternalSubtitle = onPickExternalSubtitle,
             onDismiss = { showTracksDialog = false }
         )
     }
@@ -290,6 +343,23 @@ fun PlayerCockpitScreen(
             onDismiss = { showQueueSheet = false }
         )
     }
+
+    if (showBookmarksSheet) {
+        BookmarksAndDisplaySheet(
+            playerState = playerState,
+            orientationLock = cabinPrefs.orientationLock,
+            bookmarks = activeVideoBookmarks,
+            onAddBookmark = { label, posMs ->
+                val vid = playerState.activeVideoId
+                if (vid != null) {
+                    onAddBookmark(vid, label, posMs)
+                }
+            },
+            onDeleteBookmark = onDeleteBookmark,
+            onSetOrientationLock = onSetOrientationLock,
+            onDismiss = { showBookmarksSheet = false }
+        )
+    }
 }
 
 @OptIn(UnstableApi::class)
@@ -301,8 +371,12 @@ private fun VideoSurfaceViewport(
     cabinUtility: CabinUtilityState,
     safetyState: SafetyGateState,
     sinkTelemetry: VideoSinkTelemetry,
+    orientationLock: OrientationLockMode,
     remoteModeActive: Boolean,
+    isTouchLocked: Boolean,
     isInPipMode: Boolean,
+    onToggleTouchLock: () -> Unit,
+    onCycleOrientation: () -> Unit,
     onToggleRemoteMode: () -> Unit,
     onDismissChargingAlert: () -> Unit,
     modifier: Modifier = Modifier
@@ -315,9 +389,14 @@ private fun VideoSurfaceViewport(
     var gestureHudType by remember { mutableStateOf(0) } // 0=none, 1=seekFwd, 2=seekBack, 3=brightness, 4=volume
     var gestureHudProgress by remember { mutableStateOf<Float?>(null) }
     var gestureHudSerial by remember { mutableStateOf(0) }
+    var hudControlsVisible by remember { mutableStateOf(false) }
+    var hudInteractionSerial by remember { mutableStateOf(0) }
+    var lockPromptVisible by remember { mutableStateOf(false) }
+    var lockPromptSerial by remember { mutableStateOf(0) }
 
     val latestPlayerState by rememberUpdatedState(playerState)
     val latestRemoteMode by rememberUpdatedState(remoteModeActive)
+    val latestTouchLocked by rememberUpdatedState(isTouchLocked)
 
     LaunchedEffect(gestureHudSerial) {
         if (gestureHudText != null) {
@@ -327,13 +406,27 @@ private fun VideoSurfaceViewport(
         }
     }
 
+    LaunchedEffect(hudControlsVisible, hudInteractionSerial, playerState.isPlaying) {
+        if (hudControlsVisible && playerState.isPlaying) {
+            delay(3500L)
+            hudControlsVisible = false
+        }
+    }
+
+    LaunchedEffect(lockPromptVisible, lockPromptSerial) {
+        if (lockPromptVisible) {
+            delay(2500L)
+            lockPromptVisible = false
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             VideoSinkRouter.phoneSink.bindSurfaceView(null)
         }
     }
 
-    val videoAspect = remember(playerState.videoWidth, playerState.videoHeight, playerState.aspectMode) {
+    val videoAspect = remember(playerState.videoWidth, playerState.videoHeight) {
         if (playerState.videoWidth > 0 && playerState.videoHeight > 0) {
             playerState.videoWidth.toFloat() / playerState.videoHeight.toFloat()
         } else {
@@ -360,6 +453,11 @@ private fun VideoSurfaceViewport(
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onDoubleTap = { offset ->
+                                    if (latestTouchLocked) {
+                                        lockPromptVisible = true
+                                        lockPromptSerial++
+                                        return@detectTapGestures
+                                    }
                                     if (offset.x < size.width * 0.42f) {
                                         PlayerController.seekBy(-10_000L)
                                         gestureHudType = 2
@@ -377,13 +475,19 @@ private fun VideoSurfaceViewport(
                                     }
                                 },
                                 onTap = {
-                                    if (latestRemoteMode) {
+                                    if (latestTouchLocked) {
+                                        lockPromptVisible = !lockPromptVisible
+                                        if (lockPromptVisible) lockPromptSerial++
+                                    } else if (latestRemoteMode) {
                                         val wasPlaying = latestPlayerState.isPlaying
                                         PlayerController.togglePlayPause()
                                         gestureHudType = 0
                                         gestureHudProgress = null
                                         gestureHudText = if (wasPlaying) "Paused" else "Playing"
                                         gestureHudSerial++
+                                    } else {
+                                        hudControlsVisible = !hudControlsVisible
+                                        if (hudControlsVisible) hudInteractionSerial++
                                     }
                                 }
                             )
@@ -391,6 +495,7 @@ private fun VideoSurfaceViewport(
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false)
+                                if (latestTouchLocked) return@awaitEachGesture
                                 val startX = down.position.x
                                 var totalDx = 0f
                                 var totalDy = 0f
@@ -482,27 +587,60 @@ private fun VideoSurfaceViewport(
             ),
         contentAlignment = Alignment.Center
     ) {
-        val surfaceModifier = when (playerState.aspectMode) {
-            AspectMode.FIT -> Modifier
-                .fillMaxSize()
-                .aspectRatio(videoAspect, matchHeightConstraintsFirst = false)
-            AspectMode.FILL -> Modifier.fillMaxSize()
-            AspectMode.ZOOM -> Modifier
-                .fillMaxSize()
-                .aspectRatio(videoAspect * 1.15f)
-        }
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            val boxW = maxWidth
+            val boxH = maxHeight
+            val boxAspect = if (boxH.value > 0f) boxW.value / boxH.value else 16f / 9f
 
-        AndroidView(
-            factory = { ctx ->
-                SurfaceView(ctx).apply {
-                    VideoSinkRouter.phoneSink.bindSurfaceView(this)
+            val surfaceModifier = when (playerState.aspectMode) {
+                AspectMode.FIT -> {
+                    if (videoAspect > boxAspect) {
+                        Modifier.requiredSize(width = boxW, height = boxW / videoAspect)
+                    } else {
+                        Modifier.requiredSize(width = boxH * videoAspect, height = boxH)
+                    }
                 }
-            },
-            update = { view ->
-                VideoSinkRouter.phoneSink.bindSurfaceView(view)
-            },
-            modifier = surfaceModifier
-        )
+                AspectMode.FILL -> {
+                    if (videoAspect > boxAspect) {
+                        Modifier.requiredSize(width = boxH * videoAspect, height = boxH)
+                    } else {
+                        Modifier.requiredSize(width = boxW, height = boxW / videoAspect)
+                    }
+                }
+                AspectMode.ZOOM -> {
+                    val zoom = 1.22f
+                    if (videoAspect > boxAspect) {
+                        Modifier.requiredSize(width = boxH * videoAspect * zoom, height = boxH * zoom)
+                    } else {
+                        Modifier.requiredSize(width = boxW * zoom, height = (boxW / videoAspect) * zoom)
+                    }
+                }
+                AspectMode.ULTRAWIDE_21_9 -> {
+                    val targetRatio = 21f / 9f
+                    if (videoAspect > targetRatio) {
+                        Modifier.requiredSize(width = boxW, height = boxW / targetRatio)
+                    } else {
+                        Modifier.requiredSize(width = boxW, height = boxW / targetRatio)
+                    }
+                }
+                AspectMode.STRETCH -> Modifier.fillMaxSize()
+            }
+
+            AndroidView(
+                factory = { ctx ->
+                    SurfaceView(ctx).apply {
+                        VideoSinkRouter.phoneSink.bindSurfaceView(this)
+                    }
+                },
+                update = { view ->
+                    VideoSinkRouter.phoneSink.bindSurfaceView(view)
+                },
+                modifier = surfaceModifier
+            )
+        }
 
         // Real-time styled Media3 SubtitleView overlay
         AndroidView(
@@ -700,6 +838,114 @@ private fun VideoSurfaceViewport(
             }
         }
 
+        // Auto-hide viewport overlay HUD controls
+        AnimatedVisibility(
+            visible = hudControlsVisible && !isTouchLocked && !remoteModeActive && !safetyState.isBlocked && !isInPipMode,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(10.dp)
+        ) {
+            Surface(
+                color = Color(0xCC0B1018),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+                    .testTag("viewport_hud_overlay")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    IconButton(
+                        onClick = {
+                            PlayerController.togglePlayPause()
+                            hudInteractionSerial++
+                        },
+                        modifier = Modifier.minimumInteractiveComponentSize()
+                    ) {
+                        Icon(
+                            imageVector = if (playerState.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = "Play or pause",
+                            tint = Color.White
+                        )
+                    }
+                    Text(
+                        text = "${formatDuration(playerState.positionMs)} / ${formatDuration(playerState.durationMs)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = {
+                                PlayerController.cycleAspectMode()
+                                hudInteractionSerial++
+                            }
+                        ) {
+                            Text(playerState.aspectMode.label, color = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(
+                            onClick = {
+                                onCycleOrientation()
+                                hudInteractionSerial++
+                            },
+                            modifier = Modifier.minimumInteractiveComponentSize()
+                        ) {
+                            Icon(
+                                imageVector = if (orientationLock == OrientationLockMode.LANDSCAPE) {
+                                    Icons.Filled.ScreenLockLandscape
+                                } else {
+                                    Icons.Filled.ScreenRotation
+                                },
+                                contentDescription = "Cycle orientation lock",
+                                tint = if (orientationLock == OrientationLockMode.AUTO) Color.White else MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                hudControlsVisible = false
+                                onToggleTouchLock()
+                                lockPromptVisible = true
+                                lockPromptSerial++
+                            },
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("hud_lock_touch_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = "Lock touch controls",
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Touch-Locked floating unlock button
+        AnimatedVisibility(
+            visible = isTouchLocked && lockPromptVisible && !safetyState.isBlocked && !isInPipMode,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 14.dp)
+        ) {
+            FilledTonalButton(
+                onClick = {
+                    lockPromptVisible = false
+                    onToggleTouchLock()
+                },
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("unlock_touch_pill")
+            ) {
+                Icon(Icons.Filled.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Touch Locked • Tap to Unlock")
+            }
+        }
+
         if (safetyState.isBlocked && !isInPipMode) {
             Box(
                 modifier = Modifier
@@ -759,11 +1005,17 @@ private fun PlayerTransportPanel(
     playerState: PlayerUiState,
     eqState: EqualizerState,
     cabinUtility: CabinUtilityState,
+    orientationLock: OrientationLockMode,
+    bookmarks: List<SyncedBookmark>,
     isExternalSink: Boolean,
     remoteModeActive: Boolean,
+    isTouchLocked: Boolean,
     onOpenTracks: () -> Unit,
     onOpenLiveEq: () -> Unit,
     onOpenQueue: () -> Unit,
+    onOpenBookmarksAndDisplay: () -> Unit,
+    onToggleTouchLock: () -> Unit,
+    onCycleOrientation: () -> Unit,
     onEnterPip: () -> Unit,
     onToggleRemoteMode: () -> Unit,
     onOpenDeck: () -> Unit
@@ -822,6 +1074,30 @@ private fun PlayerTransportPanel(
                 }
             }
 
+            if (playerState.abLoopStartMs != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val endLabel = playerState.abLoopEndMs?.let { formatDuration(it) } ?: "Set B"
+                        Text(
+                            text = "A–B Loop: ${formatDuration(playerState.abLoopStartMs)} -> $endLabel",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        TextButton(onClick = { PlayerController.clearAbLoop() }) {
+                            Text("Clear")
+                        }
+                    }
+                }
+            }
+
             val duration = playerState.durationMs.coerceAtLeast(1L)
             Column {
                 Slider(
@@ -851,6 +1127,26 @@ private fun PlayerTransportPanel(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            if (bookmarks.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    bookmarks.forEach { bm ->
+                        FilterChip(
+                            selected = kotlin.math.abs(playerState.positionMs - bm.positionMs) < 3000L,
+                            onClick = { PlayerController.seekTo(bm.positionMs) },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Bookmark, contentDescription = null, modifier = Modifier.size(14.dp))
+                            },
+                            label = { Text("${bm.label} (${formatDuration(bm.positionMs)})") }
+                        )
+                    }
                 }
             }
 
@@ -942,7 +1238,7 @@ private fun PlayerTransportPanel(
                 ) {
                     Icon(Icons.Filled.AspectRatio, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(playerState.aspectMode.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(playerState.aspectMode.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
                 FilledTonalButton(
@@ -954,7 +1250,11 @@ private fun PlayerTransportPanel(
                 ) {
                     Icon(Icons.Filled.Subtitles, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Subs", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        text = if (playerState.externalSubtitleName != null) "Ext Sub" else "Subs",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 FilledTonalButton(
@@ -981,7 +1281,7 @@ private fun PlayerTransportPanel(
                 FilledTonalButton(
                     onClick = onOpenQueue,
                     modifier = Modifier
-                        .weight(1.2f)
+                        .weight(1.1f)
                         .height(48.dp)
                         .testTag("queue_sleep_button")
                 ) {
@@ -991,15 +1291,68 @@ private fun PlayerTransportPanel(
                 }
 
                 FilledTonalButton(
+                    onClick = onOpenBookmarksAndDisplay,
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .height(48.dp)
+                        .testTag("bookmarks_loop_button")
+                ) {
+                    Icon(Icons.Filled.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Marks (${bookmarks.size})", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+
+                FilledTonalButton(
                     onClick = onEnterPip,
                     modifier = Modifier
-                        .weight(0.9f)
+                        .weight(0.85f)
                         .height(48.dp)
                         .testTag("pip_button")
                 ) {
                     Icon(Icons.Filled.PictureInPictureAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("PiP", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onToggleTouchLock,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("touch_lock_button")
+                ) {
+                    Icon(
+                        imageVector = if (isTouchLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (isTouchLocked) "Locked" else "Touch Lock", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+
+                FilledTonalButton(
+                    onClick = onCycleOrientation,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .testTag("orientation_lock_button")
+                ) {
+                    Icon(
+                        imageVector = if (orientationLock == OrientationLockMode.LANDSCAPE) {
+                            Icons.Filled.ScreenLockLandscape
+                        } else {
+                            Icons.Filled.ScreenRotation
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(orientationLock.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
                 if (isExternalSink) {

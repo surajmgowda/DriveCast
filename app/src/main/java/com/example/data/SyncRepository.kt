@@ -456,6 +456,93 @@ class SyncRepository(
         }
     }
 
+    fun observeBookmarks(userId: String): Flow<List<SyncedBookmark>> = flow {
+        val uid = requireUserId()
+        check(uid == userId) { "Signed-in user mismatch for bookmarks." }
+        val path = "users/$uid/bookmarks"
+        emitAll(
+            db.collection("users").document(uid).collection("bookmarks")
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.toObjects(
+                        SyncedBookmark::class.java,
+                        DocumentSnapshot.ServerTimestampBehavior.ESTIMATE
+                    ).sortedBy { it.positionMs }
+                }
+                .catch { error ->
+                    val firestoreError = generateSequence(error) { it.cause }
+                        .filterIsInstance<FirebaseFirestoreException>()
+                        .firstOrNull()
+                    if (firestoreError == null && error is CancellationException) throw error
+                    val exceptionToLog = firestoreError ?: (error as? Exception)
+                    if (exceptionToLog != null && auth.currentUser?.uid == uid) {
+                        handleFirestoreError(exceptionToLog, OperationType.LIST, path)
+                    }
+                    throw error
+                }
+        )
+    }
+
+    suspend fun upsertBookmark(bookmark: SyncedBookmark): Result<Unit> {
+        val rawId = bookmark.id.ifBlank { "bm_${bookmark.videoId}_${bookmark.positionMs}" }
+        val safeId = stableDocId(rawId)
+        var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/bookmarks/$safeId"
+        return try {
+            val uid = requireUserId()
+            val docRef = db.collection("users").document(uid).collection("bookmarks").document(safeId)
+            docPath = docRef.path
+
+            val safeVideoId = stableDocId(bookmark.videoId).take(128)
+            val safeLabel = bookmark.label.trim().ifEmpty { "Bookmark" }.take(60)
+            val safePos = bookmark.positionMs.coerceIn(0L, 86_400_000L)
+
+            val existingSnap = docRef.get().await()
+            if (existingSnap.exists()) {
+                docRef.update(
+                    mapOf(
+                        "label" to safeLabel,
+                        "positionMs" to safePos,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } else {
+                docRef.set(
+                    mapOf(
+                        "userId" to uid,
+                        "videoId" to safeVideoId,
+                        "label" to safeLabel,
+                        "positionMs" to safePos,
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docPath)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteBookmark(bookmarkId: String): Result<Unit> {
+        val safeId = stableDocId(bookmarkId)
+        var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/bookmarks/$safeId"
+        return try {
+            val uid = requireUserId()
+            val docRef = db.collection("users").document(uid).collection("bookmarks").document(safeId)
+            docPath = docRef.path
+            docRef.delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docPath)
+            Result.failure(e)
+        }
+    }
+
     companion object {
         fun stableDocId(rawKey: String): String {
             if (rawKey.matches(Regex("^[a-zA-Z0-9_\\-]{1,120}$"))) {
