@@ -37,7 +37,26 @@ class SyncRepository(
         } else null
     )
 
-    private val offlineVideos = MutableStateFlow<List<SyncedVideoEntry>>(emptyList())
+    private val offlineVideos = MutableStateFlow<List<SyncedVideoEntry>>(
+        listOf(
+            SyncedVideoEntry(
+                id = "sample_big_buck_bunny",
+                displayName = "Big Buck Bunny (1080p Demo)",
+                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+                durationMs = 596000L,
+                resolutionLabel = "1080p MP4 • 5.4M",
+                mimeType = "video/mp4"
+            ),
+            SyncedVideoEntry(
+                id = "sample_elephants_dream",
+                displayName = "Elephant's Dream (Sci-Fi)",
+                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+                durationMs = 653000L,
+                resolutionLabel = "1080p MP4 • 4.8M",
+                mimeType = "video/mp4"
+            )
+        )
+    )
     private val offlineEqPresets = MutableStateFlow(DEFAULT_EQ_PRESETS)
     private val offlinePlaylists = MutableStateFlow<List<SyncedPlaylist>>(emptyList())
     private val offlineBookmarks = MutableStateFlow<List<SyncedBookmark>>(emptyList())
