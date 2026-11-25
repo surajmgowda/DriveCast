@@ -54,7 +54,7 @@ data class CarDiagnosticState(
 )
 
 /**
- * Persistent ring-buffer diagnostic logger for Android Auto CarAppService & MediaLibraryService
+ * Persistent ring-buffer diagnostic logger for Android Auto CarAppService & MediaSessionService
  * lifecycle events, host validation, surface callbacks, and head-unit visibility auditing.
  */
 object CarDiagnosticLogger {
@@ -221,9 +221,9 @@ object CarDiagnosticLogger {
             !hasCarMeta || !carServiceOk ->
                 "Manifest declaration incomplete (carMeta=$hasCarMeta, carServiceExported=$carServiceOk)."
             !isPlayStore ->
-                "App was sideloaded (${installer ?: "PackageInstaller"}). Enable Android Auto Developer Settings -> Unknown sources, then restart Android Auto. Note: recent Android Auto builds may still hide sideloaded CarAppService apps on car head units while allowing MediaLibraryService audio."
+                "App was sideloaded (${installer ?: "PackageInstaller"}). Enable Android Auto Developer Settings -> Unknown sources, then restart Android Auto so VideoDeckCarAppService (template mode) appears in the car launcher."
             else ->
-                "All manifest, service, and Play installer checks passed."
+                "All manifest, template CarAppService, MediaSessionService, and Play installer checks passed."
         }
 
         val audit = CarVisibilityAudit(

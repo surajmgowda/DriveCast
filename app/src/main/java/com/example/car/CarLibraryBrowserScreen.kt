@@ -18,6 +18,7 @@ import com.example.data.LocalMediaLibrary
 import com.example.data.SyncedVideoEntry
 import com.example.player.PlayerController
 import com.example.safety.SafetyGateManager
+import com.example.sink.VideoSinkRouter
 import com.example.ui.formatDuration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,7 @@ class CarLibraryBrowserScreen(carContext: CarContext) : Screen(carContext), Defa
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        PlayerController.ensureLibraryHydrated(carContext)
         CarDiagnosticLogger.log(
             source = "CarLibraryScreen",
             message = "onStart(librarySize=${PlayerController.librarySnapshot.value.size}, hostLimit=${resolveHostListLimit()})",
@@ -63,7 +65,7 @@ class CarLibraryBrowserScreen(carContext: CarContext) : Screen(carContext), Defa
             }
         }
 
-        if (!folderBootstrapAttempted && PlayerController.librarySnapshot.value.isEmpty()) {
+        if (!folderBootstrapAttempted) {
             folderBootstrapAttempted = true
             bootstrapLibraryFromSavedFolder()
         }
@@ -85,7 +87,7 @@ class CarLibraryBrowserScreen(carContext: CarContext) : Screen(carContext), Defa
                 val localMedia = LocalMediaLibrary(carContext)
                 val savedFolder = localMedia.offlineFolderUriFlow.firstOrNull() ?: return@launch
                 val scanned = localMedia.scanFolderTree(Uri.parse(savedFolder))
-                if (scanned.isNotEmpty() && PlayerController.librarySnapshot.value.isEmpty()) {
+                if (scanned.isNotEmpty()) {
                     val entries = scanned.map { meta ->
                         SyncedVideoEntry(
                             id = meta.docId,
@@ -96,7 +98,9 @@ class CarLibraryBrowserScreen(carContext: CarContext) : Screen(carContext), Defa
                             mimeType = meta.mimeType
                         )
                     }
-                    PlayerController.updateLibrarySnapshot(entries)
+                    val existing = PlayerController.librarySnapshot.value
+                    val merged = (entries + existing).distinctBy { it.id }
+                    PlayerController.updateLibrarySnapshot(merged)
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Car library folder bootstrap skipped: ${e.message}")
@@ -247,6 +251,7 @@ class CarLibraryBrowserScreen(carContext: CarContext) : Screen(carContext), Defa
             SafetyGateManager.setAudioDriveMode(true)
         }
         PlayerController.playFromCarLibrary(entry)
+        VideoSinkRouter.ensureActiveSurfaceAttached()
         screenManager.pop()
     }
 

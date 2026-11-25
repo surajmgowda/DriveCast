@@ -164,6 +164,7 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
         )
 
         PlayerController.ensureServiceConnected(carContext)
+        PlayerController.ensureLibraryHydrated(carContext)
         SafetyGateManager.initialize(carContext) { blocked, reason ->
             VideoSinkRouter.onSafetyGateChanged(blocked, reason)
             carScreen?.invalidate()
@@ -292,6 +293,7 @@ class CarPlayerScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
         val safetyState = SafetyGateManager.state.value
 
         val playTitle = when {
+            safetyState.isBlocked && !safetyState.audioDriveModeEnabled -> "Locked (>3km/h)"
             safetyState.isBlocked && safetyState.audioDriveModeEnabled ->
                 if (playerState.isPlaying) "Pause Audio" else "Play Audio"
             playerState.isPlaying -> "Pause"
@@ -311,7 +313,18 @@ class CarPlayerScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
                 if (safetyState.needsFreshParkedConfirmation) {
                     SafetyGateManager.confirmVehicleParked()
                 }
-                PlayerController.togglePlayPause()
+                val current = PlayerController.uiState.value
+                if (current.activeVideoId == null) {
+                    PlayerController.ensureLibraryHydrated(carContext)
+                    val firstEntry = PlayerController.librarySnapshot.value.firstOrNull()
+                    if (firstEntry != null) {
+                        PlayerController.playFromCarLibrary(firstEntry)
+                    } else {
+                        screenManager.push(CarLibraryBrowserScreen(carContext))
+                    }
+                } else {
+                    PlayerController.togglePlayPause()
+                }
                 invalidate()
             }
             .build()
@@ -350,8 +363,8 @@ class CarPlayerScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
                 Action.Builder()
                     .setIcon(
                         CarIcon.Builder(
-                            IconCompat.createWithResource(carContext, R.mipmap.ic_launcher)
-                        ).build()
+                            IconCompat.createWithResource(carContext, R.drawable.ic_car_console)
+                        ).setTint(CarColor.DEFAULT).build()
                     )
                     .setOnClickListener {
                         screenManager.push(CarInfoTemplateScreen(carContext))
@@ -360,7 +373,11 @@ class CarPlayerScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             )
             .addAction(
                 Action.Builder()
-                    .setTitle("Library")
+                    .setIcon(
+                        CarIcon.Builder(
+                            IconCompat.createWithResource(carContext, R.drawable.ic_car_library)
+                        ).setTint(CarColor.DEFAULT).build()
+                    )
                     .setOnClickListener {
                         screenManager.push(CarLibraryBrowserScreen(carContext))
                     }
@@ -368,13 +385,21 @@ class CarPlayerScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             )
             .addAction(
                 Action.Builder()
-                    .setTitle("Prev")
+                    .setIcon(
+                        CarIcon.Builder(
+                            IconCompat.createWithResource(carContext, R.drawable.ic_car_prev)
+                        ).setTint(CarColor.DEFAULT).build()
+                    )
                     .setOnClickListener { PlayerController.seekPrevious() }
                     .build()
             )
             .addAction(
                 Action.Builder()
-                    .setTitle("Next")
+                    .setIcon(
+                        CarIcon.Builder(
+                            IconCompat.createWithResource(carContext, R.drawable.ic_car_next)
+                        ).setTint(CarColor.DEFAULT).build()
+                    )
                     .setOnClickListener { PlayerController.seekNext() }
                     .build()
             )

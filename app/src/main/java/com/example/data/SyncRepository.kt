@@ -24,7 +24,8 @@ import java.security.MessageDigest
 
 class SyncRepository(
     private val db: FirebaseFirestore?,
-    private val auth: FirebaseAuth? = null
+    private val auth: FirebaseAuth? = null,
+    private val preferences: DriveCastPreferences? = null
 ) {
     constructor(context: Context) : this(
         db = if (runCatching { FirebaseApp.getApps(context.applicationContext).isNotEmpty() }.getOrDefault(false)) {
@@ -34,28 +35,13 @@ class SyncRepository(
         } else null,
         auth = if (runCatching { FirebaseApp.getApps(context.applicationContext).isNotEmpty() }.getOrDefault(false)) {
             Firebase.auth
-        } else null
+        } else null,
+        preferences = DriveCastPreferences(context.applicationContext)
     )
 
     private val offlineVideos = MutableStateFlow<List<SyncedVideoEntry>>(
-        listOf(
-            SyncedVideoEntry(
-                id = "sample_big_buck_bunny",
-                displayName = "Big Buck Bunny (1080p Demo)",
-                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-                durationMs = 596000L,
-                resolutionLabel = "1080p MP4 • 5.4M",
-                mimeType = "video/mp4"
-            ),
-            SyncedVideoEntry(
-                id = "sample_elephants_dream",
-                displayName = "Elephant's Dream (Sci-Fi)",
-                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-                durationMs = 653000L,
-                resolutionLabel = "1080p MP4 • 4.8M",
-                mimeType = "video/mp4"
-            )
-        )
+        preferences?.readVideoLibrarySnapshot()?.ifEmpty { DEFAULT_SAMPLE_VIDEOS }
+            ?: DEFAULT_SAMPLE_VIDEOS
     )
     private val offlineEqPresets = MutableStateFlow(DEFAULT_EQ_PRESETS)
     private val offlinePlaylists = MutableStateFlow<List<SyncedPlaylist>>(emptyList())
@@ -176,6 +162,7 @@ class SyncRepository(
             offlineVideos.update { list ->
                 listOf(normalized) + list.filterNot { it.id == safeDocId }
             }
+            preferences?.saveVideoLibrarySnapshot(offlineVideos.value)
             return Result.success(Unit)
         }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/videos/$safeDocId"
@@ -268,6 +255,7 @@ class SyncRepository(
                     ) else it
                 }
             }
+            preferences?.saveVideoLibrarySnapshot(offlineVideos.value)
             return Result.success(Unit)
         }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/videos/$safeDocId"
@@ -300,6 +288,7 @@ class SyncRepository(
         val firestore = db
         if (firestore == null || auth == null) {
             offlineVideos.update { list -> list.filterNot { it.id == safeDocId } }
+            preferences?.saveVideoLibrarySnapshot(offlineVideos.value)
             return Result.success(Unit)
         }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/videos/$safeDocId"
@@ -684,6 +673,25 @@ class SyncRepository(
             val digest = MessageDigest.getInstance("SHA-256").digest(rawKey.toByteArray())
             return "vid_" + digest.take(16).joinToString("") { "%02x".format(it) }
         }
+
+        val DEFAULT_SAMPLE_VIDEOS = listOf(
+            SyncedVideoEntry(
+                id = "sample_big_buck_bunny",
+                displayName = "Big Buck Bunny (Demo 1080p)",
+                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+                durationMs = 596_000L,
+                mimeType = "video/mp4",
+                resolutionLabel = "1080p H.264"
+            ),
+            SyncedVideoEntry(
+                id = "sample_elephants_dream",
+                displayName = "Elephants Dream (Demo HD)",
+                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+                durationMs = 653_000L,
+                mimeType = "video/mp4",
+                resolutionLabel = "720p H.264"
+            )
+        )
 
         val DEFAULT_EQ_PRESETS = listOf(
             SyncedEqPreset(

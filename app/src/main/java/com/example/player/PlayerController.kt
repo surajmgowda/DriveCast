@@ -29,9 +29,11 @@ import com.example.data.AspectMode
 import com.example.data.DriveCastPreferences
 import com.example.data.LocalMediaLibrary
 import com.example.data.QualityProfile
+import com.example.data.SyncRepository
 import com.example.data.SyncedVideoEntry
 import com.example.data.WidgetResumeSnapshot
 import com.example.safety.SafetyGateManager
+import com.example.sink.VideoSinkRouter
 import com.example.widget.DriveCastResumeWidgetProvider
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
@@ -137,8 +139,20 @@ object PlayerController {
         onProgressCheckpoint = listener
     }
 
+    fun ensureLibraryHydrated(context: Context) {
+        val appCtx = context.applicationContext
+        appContext = appCtx
+        if (_librarySnapshot.value.isEmpty()) {
+            val cached = DriveCastPreferences(appCtx).readVideoLibrarySnapshot()
+            _librarySnapshot.value = cached.ifEmpty { SyncRepository.DEFAULT_SAMPLE_VIDEOS }
+        }
+    }
+
     fun updateLibrarySnapshot(videos: List<SyncedVideoEntry>) {
         _librarySnapshot.value = videos
+        if (videos.isNotEmpty()) {
+            appContext?.let { DriveCastPreferences(it).saveVideoLibrarySnapshot(videos) }
+        }
     }
 
     fun setAutoPlayNextEnabled(enabled: Boolean) {
@@ -165,6 +179,18 @@ object PlayerController {
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                val stateLabel = when (playbackState) {
+                    Player.STATE_IDLE -> "IDLE"
+                    Player.STATE_BUFFERING -> "BUFFERING"
+                    Player.STATE_READY -> "READY"
+                    Player.STATE_ENDED -> "ENDED"
+                    else -> "UNKNOWN($playbackState)"
+                }
+                VideoPlayerDiagnosticLogger.log(
+                    source = "ExoPlayer",
+                    message = "Playback state -> $stateLabel",
+                    level = PlayerDiagLevel.INFO
+                )
                 if (playbackState == Player.STATE_READY &&
                     player.audioSessionId != C.AUDIO_SESSION_ID_UNSET &&
                     player.audioSessionId > 0
@@ -212,6 +238,13 @@ object PlayerController {
             }
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    VideoPlayerDiagnosticLogger.log(
+                        source = "ExoPlayer",
+                        message = "Video frame size -> ${videoSize.width}x${videoSize.height}",
+                        level = PlayerDiagLevel.EVENT
+                    )
+                }
                 _uiState.update {
                     it.copy(videoWidth = videoSize.width, videoHeight = videoSize.height)
                 }
@@ -325,9 +358,15 @@ object PlayerController {
             0L
         }
 
+        VideoPlayerDiagnosticLogger.log(
+            source = "PlayerController",
+            message = "playVideoQueue(${target.displayName}, uri=${resolveUri(target)})",
+            level = PlayerDiagLevel.EVENT
+        )
         player.setMediaItems(mediaItems, safeIdx, startPos)
         player.playbackParameters = PlaybackParameters(target.playbackSpeed.toFloat().coerceIn(0.25f, 4.0f))
         player.prepare()
+        VideoSinkRouter.ensureActiveSurfaceAttached()
         if (!SafetyGateManager.shouldPausePlayback()) {
             player.play()
         }
@@ -358,6 +397,7 @@ object PlayerController {
 
     fun playFromCarLibrary(entry: SyncedVideoEntry) {
         val ctx = appContext ?: return
+        ensureLibraryHydrated(ctx)
         val lib = LocalMediaLibrary(ctx)
         val queue = _librarySnapshot.value.ifEmpty { listOf(entry) }
         val startIdx = queue.indexOfFirst { it.id == entry.id }.coerceAtLeast(0)

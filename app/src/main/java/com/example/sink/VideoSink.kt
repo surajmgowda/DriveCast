@@ -1,8 +1,5 @@
 package com.example.sink
 
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.Rect
 import android.view.Surface
 import android.view.SurfaceHolder
@@ -46,7 +43,7 @@ interface VideoSink {
     val height: Int
     val isAvailable: Boolean
     fun attachPlayer(player: Player)
-    fun detachPlayer(player: Player)
+    fun detachPlayer(player: Player, clearSurfaceOnPlayer: Boolean = true)
     fun setBlanked(blanked: Boolean, reason: String? = null)
     fun release()
 }
@@ -92,7 +89,7 @@ class PhoneSurfaceSink : VideoSink {
             width = view.width
             height = view.height
             view.holder.addCallback(holderCallback)
-            if (!blanked && view.holder.surface.isValid) {
+            if (!blanked) {
                 attachedPlayer?.setVideoSurfaceView(view)
             }
         }
@@ -105,8 +102,10 @@ class PhoneSurfaceSink : VideoSink {
         }
     }
 
-    override fun detachPlayer(player: Player) {
-        surfaceView?.let { player.clearVideoSurfaceView(it) }
+    override fun detachPlayer(player: Player, clearSurfaceOnPlayer: Boolean) {
+        if (clearSurfaceOnPlayer) {
+            surfaceView?.let { player.clearVideoSurfaceView(it) }
+        }
         if (attachedPlayer === player) {
             attachedPlayer = null
         }
@@ -148,13 +147,18 @@ class CarSurfaceSink : VideoSink {
     override val isAvailable: Boolean
         get() = carSurface?.isValid == true
 
+    /**
+     * Note: We intentionally avoid calling surface.lockCanvas() on the Android Auto Surface
+     * because connecting the CPU Canvas producer to the Surface's BufferQueue can block
+     * MediaCodecVideoRenderer (NATIVE_WINDOW_API_MEDIA) from attaching to the same Surface.
+     * Safety gate banners and Audio-Only Drive Mode prompts are rendered via CarPlayerScreen's
+     * NavigationTemplate ActionStrip & Alerts instead.
+     */
     fun onCarSurfaceAvailable(surface: Surface, width: Int, height: Int) {
         this.carSurface = surface
         this.width = width
         this.height = height
-        if (blanked) {
-            drawSafetyOverlay(surface, width, height, blankReason ?: "VIDEO PAUSED: VEHICLE MOVING")
-        } else {
+        if (!blanked && surface.isValid) {
             attachedPlayer?.setVideoSurface(surface)
         }
     }
@@ -178,8 +182,10 @@ class CarSurfaceSink : VideoSink {
         }
     }
 
-    override fun detachPlayer(player: Player) {
-        carSurface?.let { player.clearVideoSurface(it) }
+    override fun detachPlayer(player: Player, clearSurfaceOnPlayer: Boolean) {
+        if (clearSurfaceOnPlayer) {
+            carSurface?.let { player.clearVideoSurface(it) }
+        }
         if (attachedPlayer === player) {
             attachedPlayer = null
         }
@@ -192,7 +198,6 @@ class CarSurfaceSink : VideoSink {
         if (!surface.isValid) return
         if (blanked) {
             attachedPlayer?.clearVideoSurface(surface)
-            drawSafetyOverlay(surface, width, height, reason ?: "PARKED-ONLY SAFETY LOCK ACTIVE")
         } else {
             attachedPlayer?.setVideoSurface(surface)
         }
@@ -202,55 +207,6 @@ class CarSurfaceSink : VideoSink {
         carSurface?.let { attachedPlayer?.clearVideoSurface(it) }
         carSurface = null
         attachedPlayer = null
-    }
-
-    private fun drawSafetyOverlay(surface: Surface, w: Int, h: Int, message: String) {
-        if (w <= 0 || h <= 0 || !surface.isValid) return
-        try {
-            val canvas: Canvas = surface.lockCanvas(null)
-            try {
-                canvas.drawColor(Color.rgb(9, 13, 20))
-                val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.rgb(245, 158, 11)
-                    style = Paint.Style.STROKE
-                    strokeWidth = 6f
-                }
-                val pad = 48f
-                canvas.drawRoundRect(pad, pad, w - pad, h - pad, 24f, 24f, accentPaint)
-
-                val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.WHITE
-                    textSize = (h * 0.065f).coerceIn(28f, 56f)
-                    textAlign = Paint.Align.CENTER
-                    isFakeBoldText = true
-                }
-                val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.rgb(148, 163, 184)
-                    textSize = (h * 0.04f).coerceIn(18f, 34f)
-                    textAlign = Paint.Align.CENTER
-                }
-                val cx = w / 2f
-                val cy = h / 2f
-                val audioMode = com.example.safety.SafetyGateManager.state.value.audioDriveModeEnabled
-                val headline = if (audioMode) "AUDIO-ONLY DRIVE MODE" else message
-                val subline = if (audioMode) {
-                    "Video blanked while moving — audio continues safely."
-                } else {
-                    "DriveCast resumes automatically once vehicle is stationary."
-                }
-                canvas.drawText(headline, cx, cy - 16f, titlePaint)
-                canvas.drawText(
-                    subline,
-                    cx,
-                    cy + 36f,
-                    subPaint
-                )
-            } finally {
-                surface.unlockCanvasAndPost(canvas)
-            }
-        } catch (_: Exception) {
-            // Surface may be transitioning or already owned by MediaCodec
-        }
     }
 }
 
@@ -288,8 +244,10 @@ class MirroredDisplaySink : VideoSink {
         }
     }
 
-    override fun detachPlayer(player: Player) {
-        externalSurface?.let { player.clearVideoSurface(it) }
+    override fun detachPlayer(player: Player, clearSurfaceOnPlayer: Boolean) {
+        if (clearSurfaceOnPlayer) {
+            externalSurface?.let { player.clearVideoSurface(it) }
+        }
         if (attachedPlayer === player) {
             attachedPlayer = null
         }
@@ -334,7 +292,7 @@ object VideoSinkRouter {
 
     fun unregisterPlayer(player: Player) {
         if (activePlayer === player) {
-            activeSink.detachPlayer(player)
+            activeSink.detachPlayer(player, clearSurfaceOnPlayer = true)
             activePlayer = null
         }
     }
@@ -346,11 +304,7 @@ object VideoSinkRouter {
     fun onSafetyGateChanged(blanked: Boolean, reason: String?) {
         carSink.setBlanked(blanked, reason)
         mirroredSink.setBlanked(blanked, reason)
-        if (_telemetry.value.isCarConnected || _telemetry.value.isUsbDisplayConnected) {
-            phoneSink.setBlanked(blanked, reason)
-        } else {
-            phoneSink.setBlanked(blanked, reason)
-        }
+        phoneSink.setBlanked(blanked, reason)
         _telemetry.update { it.copy(isBlanked = blanked, blankReason = reason) }
     }
 
@@ -386,6 +340,11 @@ object VideoSinkRouter {
         routeToBestSink()
     }
 
+    fun ensureActiveSurfaceAttached() {
+        val player = activePlayer ?: return
+        activeSink.attachPlayer(player)
+    }
+
     fun routeToBestSink(forcedType: SinkType? = null) {
         val targetSink: VideoSink = when (forcedType) {
             SinkType.CAR_SURFACE -> if (carSink.isAvailable) carSink else phoneSink
@@ -399,8 +358,10 @@ object VideoSinkRouter {
         }
 
         val player = activePlayer
-        if (activeSink !== targetSink && player != null) {
-            activeSink.detachPlayer(player)
+        val switchedSink = activeSink !== targetSink
+        if (switchedSink && player != null) {
+            // If target sink has a valid surface, swap directly via attachPlayer() without clearing to null first
+            activeSink.detachPlayer(player, clearSurfaceOnPlayer = !targetSink.isAvailable)
         }
         activeSink = targetSink
         if (player != null) {

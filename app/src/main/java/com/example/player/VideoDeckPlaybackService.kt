@@ -14,30 +14,31 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.session.LibraryResult
-import androidx.media3.session.MediaLibraryService
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
 import com.example.MainActivity
 import com.example.R
 import com.example.data.LocalMediaLibrary
 import com.example.safety.SafetyGateManager
 import com.example.sink.VideoSinkRouter
-import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
 /**
- * Foreground Media3 MediaLibraryService keeping hardware decoding, Android Auto
- * media browsing, steering-wheel / Bluetooth AVRCP media button sync, audio ducking
- * for navigation prompts, and car surface rendering alive even when locked.
+ * Foreground Media3 MediaSessionService keeping forced-hardware ExoPlayer decoding,
+ * steering-wheel / Bluetooth AVRCP media button sync, audio ducking for navigation
+ * prompts, and car surface rendering alive even when locked.
  */
 @OptIn(UnstableApi::class)
-class VideoDeckPlaybackService : MediaLibraryService() {
+class VideoDeckPlaybackService : MediaSessionService() {
 
-    private var mediaLibrarySession: MediaLibrarySession? = null
+    private var mediaSession: MediaSession? = null
     private var exoPlayer: ExoPlayer? = null
 
     override fun onCreate() {
@@ -63,7 +64,18 @@ class VideoDeckPlaybackService : MediaLibraryService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
+        val httpFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) DriveCast/1.0")
+            .setAllowCrossProtocolRedirects(true)
+
+        // DefaultDataSource.Factory supports content://, file://, AND http(s):// URIs cleanly!
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+            .setDataSourceFactory(dataSourceFactory)
+
         val player = ExoPlayer.Builder(this, renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(true)
@@ -111,107 +123,18 @@ class VideoDeckPlaybackService : MediaLibraryService() {
         )
 
         val localLibrary = LocalMediaLibrary(this)
-        val callback = object : MediaLibrarySession.Callback {
+        val callback = object : MediaSession.Callback {
             override fun onConnect(
                 session: MediaSession,
                 controller: MediaSession.ControllerInfo
             ): MediaSession.ConnectionResult {
                 com.example.car.CarDiagnosticLogger.log(
-                    source = "MediaLibrarySvc",
+                    source = "MediaSessionSvc",
                     message = "onConnect(pkg=${controller.packageName}, trusted=${controller.isTrusted})",
                     level = com.example.car.DiagLevel.EVENT,
                     context = this@VideoDeckPlaybackService
                 )
                 return MediaSession.ConnectionResult.AcceptedResultBuilder(session).build()
-            }
-
-            override fun onGetLibraryRoot(
-                session: MediaLibrarySession,
-                browser: MediaSession.ControllerInfo,
-                params: LibraryParams?
-            ): ListenableFuture<LibraryResult<MediaItem>> {
-                com.example.car.CarDiagnosticLogger.log(
-                    source = "MediaLibrarySvc",
-                    message = "onGetLibraryRoot(browser=${browser.packageName})",
-                    level = com.example.car.DiagLevel.EVENT,
-                    context = this@VideoDeckPlaybackService
-                )
-                val rootItem = MediaItem.Builder()
-                    .setMediaId(ROOT_ID)
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(getString(R.string.app_name))
-                            .setIsBrowsable(true)
-                            .setIsPlayable(false)
-                            .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
-                            .build()
-                    )
-                    .build()
-                return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params))
-            }
-
-            override fun onGetChildren(
-                session: MediaLibrarySession,
-                browser: MediaSession.ControllerInfo,
-                parentId: String,
-                page: Int,
-                pageSize: Int,
-                params: LibraryParams?
-            ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-                if (parentId != ROOT_ID) {
-                    return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
-                }
-                val entries = PlayerController.librarySnapshot.value
-                com.example.car.CarDiagnosticLogger.log(
-                    source = "MediaLibrarySvc",
-                    message = "onGetChildren(browser=${browser.packageName}, items=${entries.size})",
-                    level = com.example.car.DiagLevel.INFO,
-                    context = this@VideoDeckPlaybackService
-                )
-                val start = (page * pageSize).coerceAtLeast(0)
-                val end = (start + pageSize).coerceAtMost(entries.size)
-                val slice = if (start < end) entries.subList(start, end) else emptyList()
-                val items = slice.map { entry ->
-                    MediaItem.Builder()
-                        .setMediaId(entry.id)
-                        .setUri(localLibrary.resolveOfflineOrSourceUri(entry.uriString, entry.id))
-                        .setMediaMetadata(
-                            MediaMetadata.Builder()
-                                .setTitle(entry.displayName)
-                                .setSubtitle(entry.resolutionLabel)
-                                .setIsBrowsable(false)
-                                .setIsPlayable(true)
-                                .setMediaType(MediaMetadata.MEDIA_TYPE_VIDEO)
-                                .build()
-                        )
-                        .build()
-                }
-                return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
-            }
-
-            override fun onGetItem(
-                session: MediaLibrarySession,
-                browser: MediaSession.ControllerInfo,
-                mediaId: String
-            ): ListenableFuture<LibraryResult<MediaItem>> {
-                val entry = PlayerController.librarySnapshot.value.firstOrNull { it.id == mediaId }
-                    ?: return Futures.immediateFuture(
-                        LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
-                    )
-                val item = MediaItem.Builder()
-                    .setMediaId(entry.id)
-                    .setUri(localLibrary.resolveOfflineOrSourceUri(entry.uriString, entry.id))
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(entry.displayName)
-                            .setSubtitle(entry.resolutionLabel)
-                            .setIsBrowsable(false)
-                            .setIsPlayable(true)
-                            .setMediaType(MediaMetadata.MEDIA_TYPE_VIDEO)
-                            .build()
-                    )
-                    .build()
-                return Futures.immediateFuture(LibraryResult.ofItem(item, null))
             }
 
             override fun onAddMediaItems(
@@ -293,17 +216,18 @@ class VideoDeckPlaybackService : MediaLibraryService() {
             }
         }
 
-        mediaLibrarySession = MediaLibrarySession.Builder(this, player, callback)
+        mediaSession = MediaSession.Builder(this, player)
+            .setCallback(callback)
             .setSessionActivity(sessionActivityIntent)
             .build()
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
-        return mediaLibrarySession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        return mediaSession
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val player = mediaLibrarySession?.player
+        val player = mediaSession?.player
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
             stopSelf()
         }
@@ -312,11 +236,11 @@ class VideoDeckPlaybackService : MediaLibraryService() {
     override fun onDestroy() {
         exoPlayer?.let { VideoSinkRouter.unregisterPlayer(it) }
         AudioEqualizerEngine.releaseEffects()
-        mediaLibrarySession?.run {
+        mediaSession?.run {
             player.release()
             release()
         }
-        mediaLibrarySession = null
+        mediaSession = null
         exoPlayer = null
         super.onDestroy()
     }
@@ -337,6 +261,5 @@ class VideoDeckPlaybackService : MediaLibraryService() {
 
     companion object {
         const val CHANNEL_ID = "videodeck_playback_channel"
-        private const val ROOT_ID = "drivecast_root"
     }
 }

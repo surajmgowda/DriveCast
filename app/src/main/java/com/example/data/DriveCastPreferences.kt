@@ -96,6 +96,63 @@ class DriveCastPreferences(private val context: Context) {
         )
     }
 
+    fun saveVideoLibrarySnapshot(videos: List<SyncedVideoEntry>) {
+        val arr = org.json.JSONArray()
+        videos.forEach { v ->
+            val obj = org.json.JSONObject().apply {
+                put("id", v.id)
+                put("userId", v.userId)
+                put("uriString", v.uriString)
+                put("displayName", v.displayName)
+                put("durationMs", v.durationMs)
+                put("lastPositionMs", v.lastPositionMs)
+                put("audioTrackIndex", v.audioTrackIndex)
+                put("subtitleTrackIndex", v.subtitleTrackIndex)
+                put("playbackSpeed", v.playbackSpeed)
+                put("aspectMode", v.aspectMode)
+                put("cachedOffline", v.cachedOffline)
+                put("mimeType", v.mimeType)
+                put("resolutionLabel", v.resolutionLabel)
+                put("audioDelayMs", v.audioDelayMs)
+            }
+            arr.put(obj)
+        }
+        widgetPrefs.edit().putString(W_KEY_LIBRARY_JSON, arr.toString()).apply()
+    }
+
+    fun readVideoLibrarySnapshot(): List<SyncedVideoEntry> {
+        val raw = widgetPrefs.getString(W_KEY_LIBRARY_JSON, null) ?: return emptyList()
+        return runCatching {
+            val arr = org.json.JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val uri = obj.optString("uriString", "")
+                    if (uri.isNotBlank()) {
+                        add(
+                            SyncedVideoEntry(
+                                id = obj.optString("id", ""),
+                                userId = obj.optString("userId", ""),
+                                uriString = uri,
+                                displayName = obj.optString("displayName", "Video"),
+                                durationMs = obj.optLong("durationMs", 0L),
+                                lastPositionMs = obj.optLong("lastPositionMs", 0L),
+                                audioTrackIndex = obj.optInt("audioTrackIndex", -1),
+                                subtitleTrackIndex = obj.optInt("subtitleTrackIndex", -1),
+                                playbackSpeed = obj.optDouble("playbackSpeed", 1.0),
+                                aspectMode = obj.optString("aspectMode", AspectMode.FIT.name),
+                                cachedOffline = obj.optBoolean("cachedOffline", false),
+                                mimeType = obj.optString("mimeType", "video/mp4"),
+                                resolutionLabel = obj.optString("resolutionLabel", "HD"),
+                                audioDelayMs = obj.optInt("audioDelayMs", 0)
+                            )
+                        )
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
     companion object {
         private val KEY_AUDIO_DRIVE_MODE = booleanPreferencesKey("audio_drive_mode_enabled")
         private val KEY_BATTERY_GUARD = intPreferencesKey("battery_guard_percent")
@@ -112,5 +169,6 @@ class DriveCastPreferences(private val context: Context) {
         private const val W_KEY_POS = "position_ms"
         private const val W_KEY_DUR = "duration_ms"
         private const val W_KEY_EQ = "eq_name"
+        private const val W_KEY_LIBRARY_JSON = "video_library_snapshot_json"
     }
 }
