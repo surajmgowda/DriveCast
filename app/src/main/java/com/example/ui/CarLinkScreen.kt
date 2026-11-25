@@ -81,7 +81,12 @@ fun CarLinkScreen(
     val settings = (settingsState as? UiState.Success)?.data ?: SyncedSettings()
     val currentProfile = QualityProfile.fromRaw(settings.qualityProfile)
     val currentTransport = PreferredTransport.fromRaw(settings.preferredTransport)
-    val currentUserEmail = Firebase.auth.currentUser?.email ?: "Signed In"
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val currentUserEmail = if (isFirebaseConfigured(context)) {
+        Firebase.auth.currentUser?.email ?: "Signed In"
+    } else {
+        "Offline Car Mode"
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -189,6 +194,11 @@ fun CarLinkScreen(
                     }
                 }
             }
+        }
+
+        // 1b. Android Auto Head-Unit Visibility Audit & Lifecycle Logs
+        item {
+            CarDiagnosticsCard()
         }
 
         // 2. EV Charging Break Timer & Phone Battery Guard

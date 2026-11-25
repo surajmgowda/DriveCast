@@ -1,6 +1,8 @@
 package com.example
 
 import com.example.car.CabinUtilityManager
+import com.example.car.CarDiagnosticLogger
+import com.example.car.DiagLevel
 import com.example.data.AspectMode
 import com.example.data.OrientationLockMode
 import com.example.data.QualityProfile
@@ -154,5 +156,23 @@ class ExampleUnitTest {
         assertEquals(AspectMode.STRETCH, AspectMode.fromRaw("STRETCH"))
         assertEquals(OrientationLockMode.LANDSCAPE, OrientationLockMode.fromRaw("LANDSCAPE"))
         assertEquals(OrientationLockMode.AUTO, OrientationLockMode.fromRaw("INVALID"))
+    }
+
+    @Test
+    fun carDiagnosticLogger_recordsAndExportsEvents() {
+        CarDiagnosticLogger.clear()
+        CarDiagnosticLogger.updateSessionInfo(active = true, hostPackage = "com.google.android.projection.gearhead", carApiLevel = 7)
+        CarDiagnosticLogger.log("CarSession", "onCreateScreen", DiagLevel.EVENT)
+        CarDiagnosticLogger.log("CarSurface", "onSurfaceAvailable(1280x720)", DiagLevel.INFO)
+
+        val state = CarDiagnosticLogger.state.value
+        assertTrue(state.sessionActive)
+        assertEquals(2, state.entries.size)
+        val report = CarDiagnosticLogger.exportFormattedReport()
+        assertTrue(report.contains("com.google.android.projection.gearhead"))
+        assertTrue(report.contains("onSurfaceAvailable(1280x720)"))
+
+        CarDiagnosticLogger.clear()
+        assertTrue(CarDiagnosticLogger.state.value.entries.isEmpty())
     }
 }

@@ -3,6 +3,7 @@ package com.example.data
 import android.content.Context
 import com.example.R
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.DocumentSnapshot
@@ -12,34 +13,52 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
 
 class SyncRepository(
-    private val db: FirebaseFirestore,
-    private val auth: FirebaseAuth = Firebase.auth
+    private val db: FirebaseFirestore?,
+    private val auth: FirebaseAuth? = null
 ) {
     constructor(context: Context) : this(
-        FirebaseFirestore.getInstance(
-            context.applicationContext.getString(R.string.firestore_database_id)
-        )
+        db = if (runCatching { FirebaseApp.getApps(context.applicationContext).isNotEmpty() }.getOrDefault(false)) {
+            FirebaseFirestore.getInstance(
+                context.applicationContext.getString(R.string.firestore_database_id)
+            )
+        } else null,
+        auth = if (runCatching { FirebaseApp.getApps(context.applicationContext).isNotEmpty() }.getOrDefault(false)) {
+            Firebase.auth
+        } else null
     )
 
+    private val offlineVideos = MutableStateFlow<List<SyncedVideoEntry>>(emptyList())
+    private val offlineEqPresets = MutableStateFlow(DEFAULT_EQ_PRESETS)
+    private val offlinePlaylists = MutableStateFlow<List<SyncedPlaylist>>(emptyList())
+    private val offlineBookmarks = MutableStateFlow<List<SyncedBookmark>>(emptyList())
+    private val offlineSettings = MutableStateFlow<SyncedSettings?>(SyncedSettings())
+
     private fun requireUserId(): String {
-        return auth.currentUser?.uid
+        return auth?.currentUser?.uid
             ?: throw IllegalStateException("User must be signed in with Google before accessing cloud sync.")
     }
 
     fun observeVideos(userId: String): Flow<List<SyncedVideoEntry>> = flow {
+        val firestore = db
+        if (firestore == null || auth == null) {
+            emitAll(offlineVideos)
+            return@flow
+        }
         val uid = requireUserId()
         check(uid == userId) { "Signed-in user mismatch for video library." }
         val path = "users/$uid/videos"
         emitAll(
-            db.collection("users").document(uid).collection("videos")
+            firestore.collection("users").document(uid).collection("videos")
                 .snapshots()
                 .map { snapshot ->
                     snapshot.toObjects(
@@ -62,11 +81,16 @@ class SyncRepository(
     }
 
     fun observeEqPresets(userId: String): Flow<List<SyncedEqPreset>> = flow {
+        val firestore = db
+        if (firestore == null || auth == null) {
+            emitAll(offlineEqPresets)
+            return@flow
+        }
         val uid = requireUserId()
         check(uid == userId) { "Signed-in user mismatch for EQ presets." }
         val path = "users/$uid/eq_presets"
         emitAll(
-            db.collection("users").document(uid).collection("eq_presets")
+            firestore.collection("users").document(uid).collection("eq_presets")
                 .snapshots()
                 .map { snapshot ->
                     snapshot.toObjects(
@@ -89,11 +113,16 @@ class SyncRepository(
     }
 
     fun observeSettings(userId: String): Flow<SyncedSettings?> = flow {
+        val firestore = db
+        if (firestore == null || auth == null) {
+            emitAll(offlineSettings)
+            return@flow
+        }
         val uid = requireUserId()
         check(uid == userId) { "Signed-in user mismatch for settings." }
         val path = "users/$uid/settings/preferences"
         emitAll(
-            db.collection("users").document(uid).collection("settings").document("preferences")
+            firestore.collection("users").document(uid).collection("settings").document("preferences")
                 .snapshots()
                 .map { snapshot ->
                     if (snapshot.exists()) {
@@ -119,10 +148,21 @@ class SyncRepository(
 
     suspend fun upsertVideo(entry: SyncedVideoEntry): Result<Unit> {
         val safeDocId = stableDocId(entry.id.ifBlank { entry.uriString })
+        val firestore = db
+        if (firestore == null || auth == null) {
+            val normalized = entry.copy(
+                id = safeDocId,
+                displayName = entry.displayName.trim().ifEmpty { "Untitled Video" }.take(255)
+            )
+            offlineVideos.update { list ->
+                listOf(normalized) + list.filterNot { it.id == safeDocId }
+            }
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/videos/$safeDocId"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("videos").document(safeDocId)
+            val docRef = firestore.collection("users").document(uid).collection("videos").document(safeDocId)
             docPath = docRef.path
 
             val sanitizedTitle = entry.displayName.trim().ifEmpty { "Untitled Video" }.take(255)
@@ -195,10 +235,26 @@ class SyncRepository(
         audioDelayMs: Int
     ): Result<Unit> {
         val safeDocId = stableDocId(videoDocId)
+        val firestore = db
+        if (firestore == null || auth == null) {
+            offlineVideos.update { list ->
+                list.map {
+                    if (it.id == safeDocId) it.copy(
+                        lastPositionMs = positionMs,
+                        audioTrackIndex = audioTrackIndex,
+                        subtitleTrackIndex = subtitleTrackIndex,
+                        playbackSpeed = playbackSpeed,
+                        aspectMode = aspectMode.name,
+                        audioDelayMs = audioDelayMs
+                    ) else it
+                }
+            }
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/videos/$safeDocId"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("videos").document(safeDocId)
+            val docRef = firestore.collection("users").document(uid).collection("videos").document(safeDocId)
             docPath = docRef.path
             docRef.update(
                 mapOf(
@@ -222,10 +278,15 @@ class SyncRepository(
 
     suspend fun deleteVideo(videoDocId: String): Result<Unit> {
         val safeDocId = stableDocId(videoDocId)
+        val firestore = db
+        if (firestore == null || auth == null) {
+            offlineVideos.update { list -> list.filterNot { it.id == safeDocId } }
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/videos/$safeDocId"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("videos").document(safeDocId)
+            val docRef = firestore.collection("users").document(uid).collection("videos").document(safeDocId)
             docPath = docRef.path
             docRef.delete().await()
             Result.success(Unit)
@@ -239,10 +300,18 @@ class SyncRepository(
 
     suspend fun upsertEqPreset(preset: SyncedEqPreset): Result<Unit> {
         val safeId = stableDocId(preset.id.ifBlank { preset.name })
+        val firestore = db
+        if (firestore == null || auth == null) {
+            val normalized = preset.copy(id = safeId)
+            offlineEqPresets.update { list ->
+                list.filterNot { it.id == safeId } + normalized
+            }
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/eq_presets/$safeId"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("eq_presets").document(safeId)
+            val docRef = firestore.collection("users").document(uid).collection("eq_presets").document(safeId)
             docPath = docRef.path
 
             val bands = preset.bandLevelsMb.ifEmpty { listOf(0L, 0L, 0L, 0L, 0L) }.take(10)
@@ -287,10 +356,15 @@ class SyncRepository(
 
     suspend fun deleteEqPreset(presetId: String): Result<Unit> {
         val safeId = stableDocId(presetId)
+        val firestore = db
+        if (firestore == null || auth == null) {
+            offlineEqPresets.update { list -> list.filterNot { it.id == safeId } }
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/eq_presets/$safeId"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("eq_presets").document(safeId)
+            val docRef = firestore.collection("users").document(uid).collection("eq_presets").document(safeId)
             docPath = docRef.path
             docRef.delete().await()
             Result.success(Unit)
@@ -303,10 +377,15 @@ class SyncRepository(
     }
 
     suspend fun upsertSettings(settings: SyncedSettings): Result<Unit> {
+        val firestore = db
+        if (firestore == null || auth == null) {
+            offlineSettings.value = settings
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/settings/preferences"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("settings").document("preferences")
+            val docRef = firestore.collection("users").document(uid).collection("settings").document("preferences")
             docPath = docRef.path
 
             val safeQuality = QualityProfile.fromRaw(settings.qualityProfile).name
@@ -349,15 +428,16 @@ class SyncRepository(
     }
 
     suspend fun ensureDefaultPresetsSeeded() {
-        val uid = auth.currentUser?.uid ?: return
+        val firestore = db ?: return
+        val uid = auth?.currentUser?.uid ?: return
         try {
-            val existing = db.collection("users").document(uid).collection("eq_presets").limit(1).get().await()
+            val existing = firestore.collection("users").document(uid).collection("eq_presets").limit(1).get().await()
             if (existing.isEmpty) {
                 DEFAULT_EQ_PRESETS.forEach { preset ->
                     upsertEqPreset(preset.copy(userId = uid))
                 }
             }
-            val settingsSnap = db.collection("users").document(uid).collection("settings").document("preferences").get().await()
+            val settingsSnap = firestore.collection("users").document(uid).collection("settings").document("preferences").get().await()
             if (!settingsSnap.exists()) {
                 upsertSettings(SyncedSettings(userId = uid))
             }
@@ -369,11 +449,16 @@ class SyncRepository(
     }
 
     fun observePlaylists(userId: String): Flow<List<SyncedPlaylist>> = flow {
+        val firestore = db
+        if (firestore == null || auth == null) {
+            emitAll(offlinePlaylists)
+            return@flow
+        }
         val uid = requireUserId()
         check(uid == userId) { "Signed-in user mismatch for playlists." }
         val path = "users/$uid/playlists"
         emitAll(
-            db.collection("users").document(uid).collection("playlists")
+            firestore.collection("users").document(uid).collection("playlists")
                 .snapshots()
                 .map { snapshot ->
                     snapshot.toObjects(
@@ -397,10 +482,16 @@ class SyncRepository(
 
     suspend fun upsertPlaylist(playlist: SyncedPlaylist): Result<Unit> {
         val safeId = stableDocId(playlist.id.ifBlank { "pl_${playlist.name.lowercase()}" })
+        val firestore = db
+        if (firestore == null || auth == null) {
+            val normalized = playlist.copy(id = safeId)
+            offlinePlaylists.update { list -> list.filterNot { it.id == safeId } + normalized }
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/playlists/$safeId"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("playlists").document(safeId)
+            val docRef = firestore.collection("users").document(uid).collection("playlists").document(safeId)
             docPath = docRef.path
 
             val safeName = playlist.name.trim().ifEmpty { "Roadtrip Mix" }.take(60)
@@ -441,10 +532,15 @@ class SyncRepository(
 
     suspend fun deletePlaylist(playlistId: String): Result<Unit> {
         val safeId = stableDocId(playlistId)
+        val firestore = db
+        if (firestore == null || auth == null) {
+            offlinePlaylists.update { list -> list.filterNot { it.id == safeId } }
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/playlists/$safeId"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("playlists").document(safeId)
+            val docRef = firestore.collection("users").document(uid).collection("playlists").document(safeId)
             docPath = docRef.path
             docRef.delete().await()
             Result.success(Unit)
@@ -457,11 +553,16 @@ class SyncRepository(
     }
 
     fun observeBookmarks(userId: String): Flow<List<SyncedBookmark>> = flow {
+        val firestore = db
+        if (firestore == null || auth == null) {
+            emitAll(offlineBookmarks)
+            return@flow
+        }
         val uid = requireUserId()
         check(uid == userId) { "Signed-in user mismatch for bookmarks." }
         val path = "users/$uid/bookmarks"
         emitAll(
-            db.collection("users").document(uid).collection("bookmarks")
+            firestore.collection("users").document(uid).collection("bookmarks")
                 .snapshots()
                 .map { snapshot ->
                     snapshot.toObjects(
@@ -486,10 +587,18 @@ class SyncRepository(
     suspend fun upsertBookmark(bookmark: SyncedBookmark): Result<Unit> {
         val rawId = bookmark.id.ifBlank { "bm_${bookmark.videoId}_${bookmark.positionMs}" }
         val safeId = stableDocId(rawId)
+        val firestore = db
+        if (firestore == null || auth == null) {
+            val normalized = bookmark.copy(id = safeId)
+            offlineBookmarks.update { list ->
+                (list.filterNot { it.id == safeId } + normalized).sortedBy { it.positionMs }
+            }
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/bookmarks/$safeId"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("bookmarks").document(safeId)
+            val docRef = firestore.collection("users").document(uid).collection("bookmarks").document(safeId)
             docPath = docRef.path
 
             val safeVideoId = stableDocId(bookmark.videoId).take(128)
@@ -528,10 +637,15 @@ class SyncRepository(
 
     suspend fun deleteBookmark(bookmarkId: String): Result<Unit> {
         val safeId = stableDocId(bookmarkId)
+        val firestore = db
+        if (firestore == null || auth == null) {
+            offlineBookmarks.update { list -> list.filterNot { it.id == safeId } }
+            return Result.success(Unit)
+        }
         var docPath = "users/${auth.currentUser?.uid ?: "unauthenticated"}/bookmarks/$safeId"
         return try {
             val uid = requireUserId()
-            val docRef = db.collection("users").document(uid).collection("bookmarks").document(safeId)
+            val docRef = firestore.collection("users").document(uid).collection("bookmarks").document(safeId)
             docPath = docRef.path
             docRef.delete().await()
             Result.success(Unit)

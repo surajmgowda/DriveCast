@@ -86,6 +86,7 @@ import com.example.ui.AutoCockpitTopBar
 import com.example.ui.CarLinkScreen
 import com.example.ui.DeckLibraryScreen
 import com.example.ui.PlayerCockpitScreen
+import com.example.ui.isFirebaseConfigured
 import com.example.ui.signOutUser
 import com.example.ui.theme.VideoDeckTheme
 import com.example.viewmodel.UiState
@@ -252,26 +253,43 @@ fun AppContent(
     onConsumeWidgetResume: () -> Unit,
     onRequestPip: () -> Unit
 ) {
-    var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
-    DisposableEffect(Unit) {
-        val listener = FirebaseAuth.AuthStateListener { auth ->
-            currentUser = auth.currentUser
+    val context = LocalContext.current
+    val firebaseReady = remember { isFirebaseConfigured(context) }
+    var currentUser by remember {
+        mutableStateOf(if (firebaseReady) Firebase.auth.currentUser else null)
+    }
+    var offlineModeEnabled by remember { mutableStateOf(false) }
+
+    if (firebaseReady) {
+        DisposableEffect(Unit) {
+            val listener = FirebaseAuth.AuthStateListener { auth ->
+                currentUser = auth.currentUser
+            }
+            Firebase.auth.addAuthStateListener(listener)
+            onDispose { Firebase.auth.removeAuthStateListener(listener) }
         }
-        Firebase.auth.addAuthStateListener(listener)
-        onDispose { Firebase.auth.removeAuthStateListener(listener) }
     }
 
     val user = currentUser
-    if (user == null) {
-        AuthScreen(onAuthSuccess = { currentUser = Firebase.auth.currentUser })
+    if (user == null && !offlineModeEnabled) {
+        AuthScreen(
+            onAuthSuccess = {
+                if (firebaseReady) currentUser = Firebase.auth.currentUser
+            },
+            onContinueOffline = {
+                offlineModeEnabled = true
+            }
+        )
     } else {
-        key(user.uid) {
+        val activeUserId = user?.uid ?: "offline_local_user"
+        key(activeUserId) {
             VideoDeckAppShell(
-                currentUserId = user.uid,
+                currentUserId = activeUserId,
                 isInPipMode = isInPipMode,
                 widgetResumePending = widgetResumePending,
                 onConsumeWidgetResume = onConsumeWidgetResume,
-                onRequestPip = onRequestPip
+                onRequestPip = onRequestPip,
+                onOfflineSignOut = { offlineModeEnabled = false }
             )
         }
     }
@@ -283,7 +301,8 @@ fun VideoDeckAppShell(
     isInPipMode: Boolean,
     widgetResumePending: Boolean,
     onConsumeWidgetResume: () -> Unit,
-    onRequestPip: () -> Unit
+    onRequestPip: () -> Unit,
+    onOfflineSignOut: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -619,7 +638,9 @@ fun VideoDeckAppShell(
                                     onStartChargingTimer = { viewModel.startChargingTimer(it) },
                                     onCancelChargingTimer = { viewModel.cancelChargingTimer() },
                                     onSignOut = {
-                                        signOutUser(credentialManager, scope)
+                                        signOutUser(context, credentialManager, scope) {
+                                            onOfflineSignOut()
+                                        }
                                     }
                                 )
                             }

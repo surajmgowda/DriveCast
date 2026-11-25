@@ -116,6 +116,12 @@ class VideoDeckPlaybackService : MediaLibraryService() {
                 session: MediaSession,
                 controller: MediaSession.ControllerInfo
             ): MediaSession.ConnectionResult {
+                com.example.car.CarDiagnosticLogger.log(
+                    source = "MediaLibrarySvc",
+                    message = "onConnect(pkg=${controller.packageName}, trusted=${controller.isTrusted})",
+                    level = com.example.car.DiagLevel.EVENT,
+                    context = this@VideoDeckPlaybackService
+                )
                 return MediaSession.ConnectionResult.AcceptedResultBuilder(session).build()
             }
 
@@ -124,6 +130,12 @@ class VideoDeckPlaybackService : MediaLibraryService() {
                 browser: MediaSession.ControllerInfo,
                 params: LibraryParams?
             ): ListenableFuture<LibraryResult<MediaItem>> {
+                com.example.car.CarDiagnosticLogger.log(
+                    source = "MediaLibrarySvc",
+                    message = "onGetLibraryRoot(browser=${browser.packageName})",
+                    level = com.example.car.DiagLevel.EVENT,
+                    context = this@VideoDeckPlaybackService
+                )
                 val rootItem = MediaItem.Builder()
                     .setMediaId(ROOT_ID)
                     .setMediaMetadata(
@@ -150,6 +162,12 @@ class VideoDeckPlaybackService : MediaLibraryService() {
                     return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
                 }
                 val entries = PlayerController.librarySnapshot.value
+                com.example.car.CarDiagnosticLogger.log(
+                    source = "MediaLibrarySvc",
+                    message = "onGetChildren(browser=${browser.packageName}, items=${entries.size})",
+                    level = com.example.car.DiagLevel.INFO,
+                    context = this@VideoDeckPlaybackService
+                )
                 val start = (page * pageSize).coerceAtLeast(0)
                 val end = (start + pageSize).coerceAtMost(entries.size)
                 val slice = if (start < end) entries.subList(start, end) else emptyList()

@@ -47,8 +47,26 @@ import kotlinx.coroutines.launch
  * controls, in-car library browser, Audio-Only Drive Mode, and fail-closed safety gating.
  */
 class VideoDeckCarAppService : CarAppService() {
+    override fun onCreate() {
+        super.onCreate()
+        CarDiagnosticLogger.init(this)
+        CarDiagnosticLogger.log(
+            source = "CarAppService",
+            message = "onCreate() bound by Android Auto host",
+            level = DiagLevel.EVENT,
+            context = this
+        )
+    }
+
     override fun createHostValidator(): HostValidator {
-        return if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+        val isDebug = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        CarDiagnosticLogger.log(
+            source = "CarAppService",
+            message = "createHostValidator() -> ${if (isDebug) "ALLOW_ALL_HOSTS_VALIDATOR (debuggable)" else "hosts_allowlist_sample (release)"}",
+            level = DiagLevel.EVENT,
+            context = this
+        )
+        return if (isDebug) {
             HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
         } else {
             HostValidator.Builder(applicationContext)
@@ -57,7 +75,25 @@ class VideoDeckCarAppService : CarAppService() {
         }
     }
 
-    override fun onCreateSession(): Session = VideoDeckCarSession()
+    override fun onCreateSession(): Session {
+        CarDiagnosticLogger.log(
+            source = "CarAppService",
+            message = "onCreateSession() creating VideoDeckCarSession",
+            level = DiagLevel.EVENT,
+            context = this
+        )
+        return VideoDeckCarSession()
+    }
+
+    override fun onDestroy() {
+        CarDiagnosticLogger.log(
+            source = "CarAppService",
+            message = "onDestroy() unbound from host",
+            level = DiagLevel.INFO,
+            context = this
+        )
+        super.onDestroy()
+    }
 }
 
 class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
@@ -68,7 +104,13 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
 
     private val surfaceCallback = object : SurfaceCallback {
         override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
-            val surface = surfaceContainer.surface ?: return
+            val surface = surfaceContainer.surface
+            CarDiagnosticLogger.log(
+                source = "CarSurface",
+                message = "onSurfaceAvailable(${surfaceContainer.width}x${surfaceContainer.height} dpi=${surfaceContainer.dpi}, valid=${surface != null})",
+                level = if (surface != null) DiagLevel.EVENT else DiagLevel.WARN
+            )
+            if (surface == null) return
             VideoSinkRouter.notifyCarSurfaceAvailable(
                 surface = surface,
                 width = surfaceContainer.width,
@@ -78,6 +120,11 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
         }
 
         override fun onVisibleAreaChanged(visibleArea: Rect) {
+            CarDiagnosticLogger.log(
+                source = "CarSurface",
+                message = "onVisibleAreaChanged($visibleArea)",
+                level = DiagLevel.INFO
+            )
             VideoSinkRouter.carSink.onVisibleAreaChanged(visibleArea)
         }
 
@@ -86,6 +133,11 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
         }
 
         override fun onSurfaceDestroyed(surfaceContainer: SurfaceContainer) {
+            CarDiagnosticLogger.log(
+                source = "CarSurface",
+                message = "onSurfaceDestroyed()",
+                level = DiagLevel.EVENT
+            )
             surfaceContainer.surface?.let { VideoSinkRouter.notifyCarSurfaceDestroyed(it) }
             SafetyGateManager.updateCarSessionActive(false)
         }
@@ -100,6 +152,17 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
     }
 
     override fun onCreateScreen(intent: Intent): Screen {
+        CarDiagnosticLogger.init(carContext)
+        val hostPkg = runCatching { carContext.hostInfo?.packageName }.getOrNull()
+        val apiLevel = runCatching { carContext.carAppApiLevel }.getOrNull()
+        CarDiagnosticLogger.updateSessionInfo(active = true, hostPackage = hostPkg, carApiLevel = apiLevel)
+        CarDiagnosticLogger.log(
+            source = "CarSession",
+            message = "onCreateScreen(action=${intent.action}) host=${hostPkg ?: "unknown"} carApiLevel=${apiLevel ?: "?"}",
+            level = DiagLevel.EVENT,
+            context = carContext
+        )
+
         PlayerController.ensureServiceConnected(carContext)
         SafetyGateManager.initialize(carContext) { blocked, reason ->
             VideoSinkRouter.onSafetyGateChanged(blocked, reason)
@@ -114,7 +177,34 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
         return screen
     }
 
+    override fun onNewIntent(intent: Intent) {
+        CarDiagnosticLogger.log(
+            source = "CarSession",
+            message = "onNewIntent(action=${intent.action})",
+            level = DiagLevel.EVENT
+        )
+        super.onNewIntent(intent)
+    }
+
+    override fun onStart(owner: LifecycleOwner) {
+        CarDiagnosticLogger.log(source = "CarSession", message = "Lifecycle onStart()", level = DiagLevel.INFO)
+    }
+
+    override fun onResume(owner: LifecycleOwner) {
+        CarDiagnosticLogger.log(source = "CarSession", message = "Lifecycle onResume()", level = DiagLevel.INFO)
+    }
+
+    override fun onPause(owner: LifecycleOwner) {
+        CarDiagnosticLogger.log(source = "CarSession", message = "Lifecycle onPause()", level = DiagLevel.INFO)
+    }
+
+    override fun onStop(owner: LifecycleOwner) {
+        CarDiagnosticLogger.log(source = "CarSession", message = "Lifecycle onStop()", level = DiagLevel.INFO)
+    }
+
     override fun onDestroy(owner: LifecycleOwner) {
+        CarDiagnosticLogger.log(source = "CarSession", message = "Lifecycle onDestroy()", level = DiagLevel.EVENT)
+        CarDiagnosticLogger.updateSessionInfo(active = false)
         unsubscribeCarSpeed()
         SafetyGateManager.updateCarSessionActive(false)
         sessionScope.cancel()
@@ -137,8 +227,18 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
             }
             speedListener = listener
             hw.carInfo.addSpeedListener(carContext.mainExecutor, listener)
+            CarDiagnosticLogger.log(
+                source = "CarHardware",
+                message = "Subscribed to CarHardwareManager Speed listener",
+                level = DiagLevel.INFO
+            )
         } catch (e: Exception) {
             Log.w(TAG, "CarHardwareManager Speed unavailable on host: ${e.message}")
+            CarDiagnosticLogger.log(
+                source = "CarHardware",
+                message = "CarHardwareManager Speed unavailable: ${e.message}",
+                level = DiagLevel.WARN
+            )
         }
     }
 
@@ -168,6 +268,7 @@ class CarPlayerScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        CarDiagnosticLogger.log(source = "CarPlayerScreen", message = "onStart()", level = DiagLevel.INFO)
         observerJob = screenScope.launch {
             PlayerController.uiState.collectLatest {
                 invalidate()
@@ -176,11 +277,13 @@ class CarPlayerScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        CarDiagnosticLogger.log(source = "CarPlayerScreen", message = "onStop()", level = DiagLevel.INFO)
         observerJob?.cancel()
         observerJob = null
     }
 
     override fun onDestroy(owner: LifecycleOwner) {
+        CarDiagnosticLogger.log(source = "CarPlayerScreen", message = "onDestroy()", level = DiagLevel.INFO)
         screenScope.cancel()
     }
 

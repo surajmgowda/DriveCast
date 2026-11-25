@@ -46,6 +46,11 @@ class CarLibraryBrowserScreen(carContext: CarContext) : Screen(carContext), Defa
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        CarDiagnosticLogger.log(
+            source = "CarLibraryScreen",
+            message = "onStart(librarySize=${PlayerController.librarySnapshot.value.size}, hostLimit=${resolveHostListLimit()})",
+            level = DiagLevel.INFO
+        )
         observerJob = screenScope.launch {
             combine(
                 PlayerController.librarySnapshot,
