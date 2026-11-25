@@ -4,35 +4,40 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.view.KeyEvent
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import com.example.MainActivity
 import com.example.R
+import com.example.data.LocalMediaLibrary
 import com.example.safety.SafetyGateManager
 import com.example.sink.VideoSinkRouter
+import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 
 /**
- * Foreground Media3 MediaSessionService keeping hardware decoding, steering-wheel /
- * Bluetooth AVRCP media button sync, audio ducking for navigation prompts, and
- * Android Auto surface rendering alive even when the phone screen locks.
+ * Foreground Media3 MediaLibraryService keeping hardware decoding, Android Auto
+ * media browsing, steering-wheel / Bluetooth AVRCP media button sync, audio ducking
+ * for navigation prompts, and car surface rendering alive even when locked.
  */
 @OptIn(UnstableApi::class)
-class VideoDeckPlaybackService : MediaSessionService() {
+class VideoDeckPlaybackService : MediaLibraryService() {
 
-    private var mediaSession: MediaSession? = null
+    private var mediaLibrarySession: MediaLibrarySession? = null
     private var exoPlayer: ExoPlayer? = null
 
     override fun onCreate() {
@@ -105,12 +110,117 @@ class VideoDeckPlaybackService : MediaSessionService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val callback = object : MediaSession.Callback {
+        val localLibrary = LocalMediaLibrary(this)
+        val callback = object : MediaLibrarySession.Callback {
             override fun onConnect(
                 session: MediaSession,
                 controller: MediaSession.ControllerInfo
             ): MediaSession.ConnectionResult {
                 return MediaSession.ConnectionResult.AcceptedResultBuilder(session).build()
+            }
+
+            override fun onGetLibraryRoot(
+                session: MediaLibrarySession,
+                browser: MediaSession.ControllerInfo,
+                params: LibraryParams?
+            ): ListenableFuture<LibraryResult<MediaItem>> {
+                val rootItem = MediaItem.Builder()
+                    .setMediaId(ROOT_ID)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(getString(R.string.app_name))
+                            .setIsBrowsable(true)
+                            .setIsPlayable(false)
+                            .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                            .build()
+                    )
+                    .build()
+                return Futures.immediateFuture(LibraryResult.ofItem(rootItem, params))
+            }
+
+            override fun onGetChildren(
+                session: MediaLibrarySession,
+                browser: MediaSession.ControllerInfo,
+                parentId: String,
+                page: Int,
+                pageSize: Int,
+                params: LibraryParams?
+            ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+                if (parentId != ROOT_ID) {
+                    return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
+                }
+                val entries = PlayerController.librarySnapshot.value
+                val start = (page * pageSize).coerceAtLeast(0)
+                val end = (start + pageSize).coerceAtMost(entries.size)
+                val slice = if (start < end) entries.subList(start, end) else emptyList()
+                val items = slice.map { entry ->
+                    MediaItem.Builder()
+                        .setMediaId(entry.id)
+                        .setUri(localLibrary.resolveOfflineOrSourceUri(entry.uriString, entry.id))
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(entry.displayName)
+                                .setSubtitle(entry.resolutionLabel)
+                                .setIsBrowsable(false)
+                                .setIsPlayable(true)
+                                .setMediaType(MediaMetadata.MEDIA_TYPE_VIDEO)
+                                .build()
+                        )
+                        .build()
+                }
+                return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+            }
+
+            override fun onGetItem(
+                session: MediaLibrarySession,
+                browser: MediaSession.ControllerInfo,
+                mediaId: String
+            ): ListenableFuture<LibraryResult<MediaItem>> {
+                val entry = PlayerController.librarySnapshot.value.firstOrNull { it.id == mediaId }
+                    ?: return Futures.immediateFuture(
+                        LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                    )
+                val item = MediaItem.Builder()
+                    .setMediaId(entry.id)
+                    .setUri(localLibrary.resolveOfflineOrSourceUri(entry.uriString, entry.id))
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(entry.displayName)
+                            .setSubtitle(entry.resolutionLabel)
+                            .setIsBrowsable(false)
+                            .setIsPlayable(true)
+                            .setMediaType(MediaMetadata.MEDIA_TYPE_VIDEO)
+                            .build()
+                    )
+                    .build()
+                return Futures.immediateFuture(LibraryResult.ofItem(item, null))
+            }
+
+            override fun onAddMediaItems(
+                mediaSession: MediaSession,
+                controller: MediaSession.ControllerInfo,
+                mediaItems: MutableList<MediaItem>
+            ): ListenableFuture<MutableList<MediaItem>> {
+                val library = PlayerController.librarySnapshot.value
+                val resolved = mediaItems.map { req ->
+                    val match = library.firstOrNull { it.id == req.mediaId }
+                    if (match != null) {
+                        req.buildUpon()
+                            .setUri(localLibrary.resolveOfflineOrSourceUri(match.uriString, match.id))
+                            .setMediaMetadata(
+                                MediaMetadata.Builder()
+                                    .setTitle(match.displayName)
+                                    .setSubtitle(match.resolutionLabel)
+                                    .build()
+                            )
+                            .build()
+                    } else if (req.localConfiguration != null) {
+                        req
+                    } else {
+                        req.buildUpon().setUri(Uri.EMPTY).build()
+                    }
+                }.toMutableList()
+                return Futures.immediateFuture(resolved)
             }
 
             override fun onMediaButtonEvent(
@@ -165,18 +275,17 @@ class VideoDeckPlaybackService : MediaSessionService() {
             }
         }
 
-        mediaSession = MediaSession.Builder(this, player)
+        mediaLibrarySession = MediaLibrarySession.Builder(this, player, callback)
             .setSessionActivity(sessionActivityIntent)
-            .setCallback(callback)
             .build()
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
-        return mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
+        return mediaLibrarySession
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val player = mediaSession?.player
+        val player = mediaLibrarySession?.player
         if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
             stopSelf()
         }
@@ -185,11 +294,11 @@ class VideoDeckPlaybackService : MediaSessionService() {
     override fun onDestroy() {
         exoPlayer?.let { VideoSinkRouter.unregisterPlayer(it) }
         AudioEqualizerEngine.releaseEffects()
-        mediaSession?.run {
+        mediaLibrarySession?.run {
             player.release()
             release()
         }
-        mediaSession = null
+        mediaLibrarySession = null
         exoPlayer = null
         super.onDestroy()
     }
@@ -210,5 +319,6 @@ class VideoDeckPlaybackService : MediaSessionService() {
 
     companion object {
         const val CHANNEL_ID = "videodeck_playback_channel"
+        private const val ROOT_ID = "drivecast_root"
     }
 }
