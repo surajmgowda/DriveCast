@@ -134,10 +134,9 @@ object SafetyGateManager {
 
     fun updateCarSessionActive(active: Boolean) {
         _state.update {
-            val requireConfirm = active && it.carSpeedKmh == null && it.gpsSpeedKmh == null
             it.copy(
                 isCarSessionActive = active,
-                needsFreshParkedConfirmation = requireConfirm
+                needsFreshParkedConfirmation = false
             )
         }
         evaluateGate()
@@ -148,7 +147,7 @@ object SafetyGateManager {
         _state.update {
             it.copy(
                 carSpeedKmh = kmh,
-                needsFreshParkedConfirmation = if (kmh != null) false else it.needsFreshParkedConfirmation
+                needsFreshParkedConfirmation = false
             )
         }
         evaluateGate()
@@ -184,17 +183,8 @@ object SafetyGateManager {
         val effectiveSpeed = current.carSpeedKmh ?: current.gpsSpeedKmh ?: 0f
 
         val moving = effectiveSpeed > SPEED_LIMIT_KMH
-        val unknownInCar = current.isCarSessionActive &&
-            current.carSpeedKmh == null &&
-            current.gpsSpeedKmh == null &&
-            current.needsFreshParkedConfirmation
-
-        val blocked = moving || unknownInCar
-        val reason = when {
-            moving -> "VEHICLE MOVING (${"%.1f".format(effectiveSpeed)} km/h)"
-            unknownInCar -> "SPEED TELEMETRY UNKNOWN — CONFIRM PARKED"
-            else -> null
-        }
+        val blocked = moving
+        val reason = if (moving) "VEHICLE MOVING (${"%.1f".format(effectiveSpeed)} km/h)" else null
 
         _state.update {
             it.copy(

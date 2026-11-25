@@ -201,6 +201,11 @@ fun CarLinkScreen(
             CarDiagnosticsCard()
         }
 
+        // 1c. Media3 ExoPlayer MediaCodecVideoRenderer Hardware Decoder Diagnostics
+        item {
+            PlayerDiagnosticsCard()
+        }
+
         // 2. EV Charging Break Timer & Phone Battery Guard
         item {
             Card(

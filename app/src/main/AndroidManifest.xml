@@ -34,6 +34,16 @@
     <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
     <uses-feature android:name="android.hardware.screen.landscape" android:required="false" />
 
+    <queries>
+        <intent>
+            <action android:name="androidx.car.app.CarAppService" />
+        </intent>
+        <package android:name="com.google.android.projection.gearhead" />
+        <package android:name="com.google.android.gms" />
+        <package android:name="com.google.android.carassistant" />
+        <provider android:authorities="androidx.car.app.connection" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:appCategory="video"

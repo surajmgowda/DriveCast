@@ -77,6 +77,11 @@ fun isFirebaseConfigured(context: Context): Boolean {
 }
 
 private fun resolveDefaultWebClientId(context: Context): String? {
+    val buildConfigKey = runCatching {
+        com.example.BuildConfig::class.java.getField("DEFAULT_WEB_CLIENT_ID").get(null) as? String
+    }.getOrNull()?.takeIf { it.isNotBlank() && !it.contains("MY_") }
+    if (buildConfigKey != null) return buildConfigKey
+
     val resId = context.resources.getIdentifier(
         "default_web_client_id",
         "string",

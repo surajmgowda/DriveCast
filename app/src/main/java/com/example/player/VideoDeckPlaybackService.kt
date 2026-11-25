@@ -45,7 +45,7 @@ class VideoDeckPlaybackService : MediaLibraryService() {
         ensureNotificationChannel()
 
         val renderersFactory = DefaultRenderersFactory(this)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
             .setEnableDecoderFallback(true)
 
         val loadControl = DefaultLoadControl.Builder()

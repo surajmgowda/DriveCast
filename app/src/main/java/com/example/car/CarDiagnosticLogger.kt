@@ -70,11 +70,12 @@ object CarDiagnosticLogger {
     private val _state = MutableStateFlow(CarDiagnosticState())
     val state: StateFlow<CarDiagnosticState> = _state.asStateFlow()
 
-    fun init(context: Context) {
+    fun init(context: Context?) {
+        val appCtx = context?.applicationContext ?: return
         synchronized(lock) {
             if (initialized) return
             initialized = true
-            val file = File(context.applicationContext.filesDir, LOG_FILE_NAME)
+            val file = File(appCtx.filesDir, LOG_FILE_NAME)
             logFile = file
             if (file.exists()) {
                 val restored = runCatching {
@@ -106,10 +107,12 @@ object CarDiagnosticLogger {
             message = message
         )
 
-        when (level) {
-            DiagLevel.ERROR -> Log.e(TAG, "[$source] $message")
-            DiagLevel.WARN -> Log.w(TAG, "[$source] $message")
-            else -> Log.i(TAG, "[$source] $message")
+        runCatching {
+            when (level) {
+                DiagLevel.ERROR -> Log.e(TAG, "[$source] $message")
+                DiagLevel.WARN -> Log.w(TAG, "[$source] $message")
+                else -> Log.i(TAG, "[$source] $message")
+            }
         }
 
         synchronized(lock) {

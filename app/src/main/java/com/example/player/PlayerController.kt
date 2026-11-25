@@ -223,6 +223,11 @@ object PlayerController {
 
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(TAG, "ExoPlayer error", error)
+                VideoPlayerDiagnosticLogger.log(
+                    source = "MediaCodecVideoRenderer",
+                    message = "PlaybackException [Code=${error.errorCodeName}]: ${error.localizedMessage ?: error.message}",
+                    level = PlayerDiagLevel.ERROR
+                )
                 _uiState.update {
                     it.copy(
                         errorMessage = error.localizedMessage
@@ -240,6 +245,24 @@ object PlayerController {
                 initializationDurationMs: Long
             ) {
                 _uiState.update { it.copy(videoDecoderName = decoderName) }
+                val isSoftware = decoderName.lowercase().contains(".sw.") ||
+                    decoderName.lowercase().contains("swcodec") ||
+                    decoderName.lowercase().contains("google") ||
+                    decoderName.lowercase().contains("software")
+                if (isSoftware) {
+                    Log.w(TAG, "WARNING: Hardware acceleration failed on vehicle hardware. Fell back to software decoder: $decoderName")
+                    VideoPlayerDiagnosticLogger.log(
+                        source = "MediaCodecVideoRenderer",
+                        message = "WARNING: Hardware acceleration failed on vehicle hardware. Fell back to software decoder: $decoderName",
+                        level = PlayerDiagLevel.WARN
+                    )
+                } else {
+                    VideoPlayerDiagnosticLogger.log(
+                        source = "MediaCodecVideoRenderer",
+                        message = "Successfully initialized forced hardware decoder '$decoderName' in ${initializationDurationMs}ms",
+                        level = PlayerDiagLevel.EVENT
+                    )
+                }
             }
 
             override fun onAudioInputFormatChanged(
