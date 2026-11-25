@@ -1,0 +1,6 @@
+{
+  "name": "DriveCast",
+  "description": "Low-latency automotive video playback and Android Auto surface projection player with hardware acceleration, real-time audio EQ, safety speed-gate, and cloud sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

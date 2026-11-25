@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DriveCast</string>
+    <string name="app_tagline">Automotive Video Projection &amp; Hi-Fi Audio Deck</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="sign_in_subtitle">Sync playback resume positions, equalizer presets, and projection profiles across your devices.</string>
+    <string name="sign_out">Sign Out</string>
+    <string name="tab_deck">Deck</string>
+    <string name="tab_player">Player</string>
+    <string name="tab_audio_eq">Audio EQ</string>
+    <string name="tab_car_link">Car Link</string>
+    <string name="action_add_video">Add Video</string>
+    <string name="action_pick_folder">Pick Folder</string>
+    <string name="action_play">Play</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_seek_back">Rewind 10 seconds</string>
+    <string name="action_seek_forward">Forward 10 seconds</string>
+    <string name="action_next">Next video</string>
+    <string name="action_previous">Previous video</string>
+    <string name="action_aspect_ratio">Cycle aspect ratio</string>
+    <string name="action_confirm_parked">Confirm Vehicle Parked</string>
+    <string name="safety_parked_verified">PARKED VERIFIED</string>
+    <string name="safety_blocked_moving">VIDEO BLANKED: VEHICLE MOVING</string>
+    <string name="safety_blocked_unknown">PARKED CHECK REQUIRED</string>
+    <string name="safety_notice_body">Video output is automatically paused and blanked whenever speed exceeds 3 km/h or telemetry is unverified.</string>
+    <string name="notification_channel_playback">DriveCast Automotive Playback</string>
+    <string name="notification_channel_desc">Keeps hardware video decoding and steering wheel media controls active while connected to the car.</string>
+    <string name="action_live_eq">Live EQ</string>
+    <string name="action_reset_flat">Reset Flat</string>
+    <string name="action_delete_preset">Delete preset</string>
+</resources>

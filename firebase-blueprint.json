@@ -1,0 +1,257 @@
+{
+  "entities": {
+    "SyncedVideoEntry": {
+      "title": "SyncedVideoEntry",
+      "description": "User video playback metadata, resume position, track selections, and offline cache status synchronized across devices.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase user UID."
+        },
+        "uriString": {
+          "type": "string",
+          "description": "Persisted SAF or media content URI string."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Human-readable video title."
+        },
+        "durationMs": {
+          "type": "integer",
+          "description": "Total video duration in milliseconds."
+        },
+        "lastPositionMs": {
+          "type": "integer",
+          "description": "Last saved playback position in milliseconds."
+        },
+        "audioTrackIndex": {
+          "type": "integer",
+          "description": "Selected audio track index (-1 for auto)."
+        },
+        "subtitleTrackIndex": {
+          "type": "integer",
+          "description": "Selected subtitle track index (-1 for off)."
+        },
+        "playbackSpeed": {
+          "type": "number",
+          "description": "Playback speed multiplier (0.25 to 4.0)."
+        },
+        "aspectMode": {
+          "type": "string",
+          "enum": ["FIT", "FILL", "ZOOM"],
+          "description": "Display scaling mode for phone and car surfaces."
+        },
+        "cachedOffline": {
+          "type": "boolean",
+          "description": "Whether the media item is cached offline for low-latency playback."
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "Media MIME type or container format."
+        },
+        "resolutionLabel": {
+          "type": "string",
+          "description": "Resolution and codec badge (e.g., 1080p HEVC)."
+        },
+        "audioDelayMs": {
+          "type": "integer",
+          "description": "Manual audio sync offset in milliseconds (-1000 to 1000)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when entry was created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when entry was last updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "uriString",
+        "displayName",
+        "durationMs",
+        "lastPositionMs",
+        "audioTrackIndex",
+        "subtitleTrackIndex",
+        "playbackSpeed",
+        "aspectMode",
+        "cachedOffline",
+        "mimeType",
+        "resolutionLabel",
+        "audioDelayMs",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SyncedEqPreset": {
+      "title": "SyncedEqPreset",
+      "description": "Custom 5-band graphic equalizer and audio FX preset synchronized across devices.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase user UID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Preset name (e.g., Windsor Cabin, Cinema)."
+        },
+        "bandLevelsMb": {
+          "type": "array",
+          "description": "Equalizer band gains in millibels (up to 10 bands)."
+        },
+        "bassBoostStrength": {
+          "type": "integer",
+          "description": "Bass boost strength (0 to 1000)."
+        },
+        "loudnessGainMb": {
+          "type": "integer",
+          "description": "Loudness enhancer gain in millibels (0 to 1500)."
+        },
+        "activePreset": {
+          "type": "boolean",
+          "description": "Whether this preset is currently selected."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when preset was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when preset was last updated."
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "bandLevelsMb",
+        "bassBoostStrength",
+        "loudnessGainMb",
+        "activePreset",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SyncedSettings": {
+      "title": "SyncedSettings",
+      "description": "Automotive projection quality, offline cache budget, and parked safety enforcement preferences.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase user UID."
+        },
+        "qualityProfile": {
+          "type": "string",
+          "enum": ["AUTO_ADAPTIVE", "USB_C_1080P60", "WIRELESS_720P60", "THERMAL_SAFE_720P30"],
+          "description": "Target projection encode/decode profile."
+        },
+        "autoResume": {
+          "type": "boolean",
+          "description": "Whether to automatically resume last playback position."
+        },
+        "offlineCacheLimitMb": {
+          "type": "integer",
+          "description": "Offline media cache budget in MB (256 to 16384)."
+        },
+        "preferredTransport": {
+          "type": "string",
+          "enum": ["AUTO", "ANDROID_AUTO_SURFACE", "USB_C_DISPLAY", "PHONE_ONLY"],
+          "description": "Preferred video sink transport."
+        },
+        "parkedOnlyEnforced": {
+          "type": "boolean",
+          "description": "Mandatory parked-only safety lock (must always be true)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when settings doc was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when settings doc was last updated."
+        }
+      },
+      "required": [
+        "userId",
+        "qualityProfile",
+        "autoResume",
+        "offlineCacheLimitMb",
+        "preferredTransport",
+        "parkedOnlyEnforced",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SyncedPlaylist": {
+      "title": "SyncedPlaylist",
+      "description": "User-created video playlist synchronized across devices.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Authenticated Firebase user UID."
+        },
+        "name": {
+          "type": "string",
+          "description": "Playlist name (1 to 60 characters)."
+        },
+        "videoIds": {
+          "type": "array",
+          "description": "Ordered list of synced video document IDs in this playlist."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when playlist was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when playlist was last updated."
+        }
+      },
+      "required": [
+        "userId",
+        "name",
+        "videoIds",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/videos/{videoId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedVideoEntry"
+      },
+      "description": "Per-user synced video library metadata and resume positions."
+    },
+    "/users/{userId}/eq_presets/{presetId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedEqPreset"
+      },
+      "description": "Per-user synced graphic equalizer and audio FX presets."
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedSettings"
+      },
+      "description": "Per-user automotive projection and cache settings."
+    },
+    "/users/{userId}/playlists/{playlistId}": {
+      "schema": {
+        "$ref": "#/entities/SyncedPlaylist"
+      },
+      "description": "Per-user custom video playlists."
+    }
+  }
+}
