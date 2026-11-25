@@ -19,6 +19,7 @@ import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.CarColor
 import androidx.car.app.model.CarIcon
+import androidx.car.app.model.Header
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Row
@@ -32,7 +33,6 @@ import com.example.R
 import com.example.player.PlayerController
 import com.example.safety.SafetyGateManager
 import com.example.sink.VideoSinkRouter
-import com.example.ui.formatDuration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -285,44 +285,6 @@ class CarPlayerScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
     }
 }
 
-class CarLibraryBrowserScreen(carContext: CarContext) : Screen(carContext) {
-    override fun onGetTemplate(): Template {
-        val videos = PlayerController.librarySnapshot.value
-        val activeId = PlayerController.uiState.value.activeVideoId
-        val builder = ItemList.Builder()
-
-        if (videos.isEmpty()) {
-            builder.addItem(
-                Row.Builder()
-                    .setTitle("No videos in DriveCast Deck")
-                    .addText("Add local MP4/MKV files from your phone to browse here.")
-                    .build()
-            )
-        } else {
-            videos.take(12).forEach { entry ->
-                val isPlaying = entry.id == activeId
-                val statusPrefix = if (isPlaying) "[Active] " else ""
-                builder.addItem(
-                    Row.Builder()
-                        .setTitle("$statusPrefix${entry.displayName}")
-                        .addText("${entry.resolutionLabel} • ${formatDuration(entry.durationMs)}")
-                        .setOnClickListener {
-                            PlayerController.playFromCarLibrary(entry)
-                            screenManager.pop()
-                        }
-                        .build()
-                )
-            }
-        }
-
-        return ListTemplate.Builder()
-            .setTitle("DriveCast Library")
-            .setHeaderAction(Action.BACK)
-            .setSingleList(builder.build())
-            .build()
-    }
-}
-
 class CarInfoTemplateScreen(carContext: CarContext) : Screen(carContext) {
     override fun onGetTemplate(): Template {
         val playerState = PlayerController.uiState.value
@@ -375,8 +337,12 @@ class CarInfoTemplateScreen(carContext: CarContext) : Screen(carContext) {
             .build()
 
         return ListTemplate.Builder()
-            .setTitle("DriveCast Car Console")
-            .setHeaderAction(Action.BACK)
+            .setHeader(
+                Header.Builder()
+                    .setTitle("DriveCast Car Console")
+                    .setStartHeaderAction(Action.BACK)
+                    .build()
+            )
             .setSingleList(itemList)
             .build()
     }

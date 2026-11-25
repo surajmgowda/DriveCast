@@ -32,16 +32,31 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Restore debug keystore
+      - name: Prepare build files
         run: |
+          [ -f .env.example ] || touch .env.example
           if [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore
+          fi
+          if [ ! -s debug.keystore ]; then
+            keytool -genkeypair -noprompt -keystore debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
 
       - name: Build Debug APK
         env:
-          GRADLE_OPTS: "-Xmx4g -Dfile.encoding=UTF-8"
-        run: gradle :app:assembleDebug --stacktrace --console=plain
+          GRADLE_OPTS: "-Xmx3g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8"
+        run: |
+          set -o pipefail
+          if ! gradle :app:assembleDebug --no-daemon --stacktrace --console=plain 2>&1 | tee build.log; then
+            echo "### Build Failure Details" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 60 build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Upload DriveCast APK
         uses: actions/upload-artifact@v6
