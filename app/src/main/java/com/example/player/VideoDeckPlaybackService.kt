@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.example.MainActivity
@@ -46,13 +47,13 @@ class VideoDeckPlaybackService : MediaSessionService() {
         ensureNotificationChannel()
 
         val renderersFactory = DefaultRenderersFactory(this)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
 
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 1500,
-                /* maxBufferMs = */ 15000,
+                /* minBufferMs = */ 2000,
+                /* maxBufferMs = */ 25000,
                 /* bufferForPlaybackMs = */ 500,
                 /* bufferForPlaybackAfterRebufferMs = */ 1000
             )
@@ -70,9 +71,10 @@ class VideoDeckPlaybackService : MediaSessionService() {
 
         // DefaultDataSource.Factory supports content://, file://, AND http(s):// URIs cleanly!
         val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
+        val extractorsFactory = DefaultExtractorsFactory()
+            .setConstantBitrateSeekingEnabled(true)
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(this)
-            .setDataSourceFactory(dataSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory, extractorsFactory)
 
         val player = ExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -94,11 +96,11 @@ class VideoDeckPlaybackService : MediaSessionService() {
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY &&
-                    player.audioSessionId != C.AUDIO_SESSION_ID_UNSET &&
-                    player.audioSessionId > 0
-                ) {
-                    AudioEqualizerEngine.attachToAudioSession(player.audioSessionId)
+                if (playbackState == Player.STATE_READY) {
+                    if (player.audioSessionId != C.AUDIO_SESSION_ID_UNSET && player.audioSessionId > 0) {
+                        AudioEqualizerEngine.attachToAudioSession(player.audioSessionId)
+                    }
+                    VideoSinkRouter.ensureActiveSurfaceAttached()
                 }
             }
 
@@ -134,6 +136,9 @@ class VideoDeckPlaybackService : MediaSessionService() {
                     level = com.example.car.DiagLevel.EVENT,
                     context = this@VideoDeckPlaybackService
                 )
+                if (controller.packageName == "com.google.android.projection.gearhead") {
+                    return MediaSession.ConnectionResult.reject()
+                }
                 return MediaSession.ConnectionResult.AcceptedResultBuilder(session).build()
             }
 
@@ -234,7 +239,10 @@ class VideoDeckPlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        exoPlayer?.let { VideoSinkRouter.unregisterPlayer(it) }
+        exoPlayer?.let {
+            PlayerController.unbindPlayer(it)
+            VideoSinkRouter.unregisterPlayer(it)
+        }
         AudioEqualizerEngine.releaseEffects()
         mediaSession?.run {
             player.release()

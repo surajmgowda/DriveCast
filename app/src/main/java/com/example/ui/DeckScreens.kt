@@ -97,16 +97,16 @@ fun AutoCockpitTopBar(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        shape = RoundedCornerShape(50),
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(18.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(50))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -117,16 +117,24 @@ fun AutoCockpitTopBar(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(34.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            )
+                        )
+                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.DirectionsCar,
                         contentDescription = "Vehicle status",
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
                 Column {
@@ -143,7 +151,7 @@ fun AutoCockpitTopBar(
                             if (transportState.usbPresentationDisplayName != null) {
                                 append(" • USB-C")
                             } else if (transportState.isEncryptedBluetoothLink) {
-                                append(" • BT Secure")
+                                append(" • BT A2DP")
                             }
                             if (cabinUtility.chargingRemainingSec > 0) {
                                 append(" • EV ${formatCountdownSeconds(cabinUtility.chargingRemainingSec)}")
@@ -162,13 +170,13 @@ fun AutoCockpitTopBar(
             Surface(
                 color = when {
                     safetyState.isBlocked && safetyState.audioDriveModeEnabled ->
-                        MaterialTheme.colorScheme.primaryContainer
+                        MaterialTheme.colorScheme.tertiaryContainer
                     safetyState.isBlocked ->
                         MaterialTheme.colorScheme.errorContainer
                     else ->
                         MaterialTheme.colorScheme.secondaryContainer
                 },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(50),
                 modifier = Modifier
                     .clickable(enabled = safetyState.needsFreshParkedConfirmation) {
                         onConfirmParked()
@@ -176,22 +184,22 @@ fun AutoCockpitTopBar(
                     .testTag("safety_status_pill")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Icon(
                         imageVector = if (safetyState.isBlocked) Icons.Filled.WarningAmber else Icons.Filled.Shield,
                         contentDescription = "Safety status",
                         tint = when {
                             safetyState.isBlocked && safetyState.audioDriveModeEnabled ->
-                                MaterialTheme.colorScheme.primary
+                                MaterialTheme.colorScheme.tertiary
                             safetyState.isBlocked ->
                                 MaterialTheme.colorScheme.error
                             else ->
                                 MaterialTheme.colorScheme.secondary
                         },
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                     Text(
                         text = when {
@@ -199,12 +207,12 @@ fun AutoCockpitTopBar(
                             safetyState.isBlocked -> "LOCKED"
                             else -> "PARKED"
                         },
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                         color = when {
                             safetyState.isBlocked && safetyState.audioDriveModeEnabled ->
-                                MaterialTheme.colorScheme.onPrimaryContainer
+                                MaterialTheme.colorScheme.onTertiaryContainer
                             safetyState.isBlocked ->
-                                MaterialTheme.colorScheme.error
+                                MaterialTheme.colorScheme.onErrorContainer
                             else ->
                                 MaterialTheme.colorScheme.onSecondaryContainer
                         }
@@ -234,6 +242,7 @@ fun DeckLibraryScreen(
     onDeleteVideo: (SyncedVideoEntry) -> Unit
 ) {
     val playlists = (playlistsState as? UiState.Success)?.data.orEmpty()
+    val videoCount = (videosState as? UiState.Success)?.data?.size ?: 0
     var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
     var showCreatePlaylistDialog by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("Charging Break") }
@@ -254,20 +263,33 @@ fun DeckLibraryScreen(
                     .fillMaxWidth()
                     .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.large)
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
-                                    MaterialTheme.colorScheme.surface
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Image(
+                        painter = androidx.compose.ui.res.painterResource(id = R.drawable.img_cockpit_hero),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clip(MaterialTheme.shapes.large)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
+                                        MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+                                    )
                                 )
                             )
-                        )
-                        .padding(18.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -275,66 +297,87 @@ fun DeckLibraryScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "MG Windsor Pro EV • DriveCast",
-                                    style = MaterialTheme.typography.headlineSmall,
+                                    text = "CABIN MEDIA DECK",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = "Windsor EV Cinema",
+                                    style = MaterialTheme.typography.headlineMedium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "OnePlus 15R • Hardware Decode • Offline Cache: ${offlineUsageMb} MB",
+                                    text = "$videoCount titles • ${offlineUsageMb} MB offline • HW Decode",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            Icon(
-                                imageVector = if (transportState.usbPresentationDisplayName != null) {
-                                    Icons.Filled.Usb
-                                } else {
-                                    Icons.Filled.BluetoothConnected
-                                },
-                                contentDescription = "Active transport",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(28.dp)
-                            )
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                                shape = CircleShape,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = if (transportState.usbPresentationDisplayName != null) {
+                                            Icons.Filled.Usb
+                                        } else {
+                                            Icons.Filled.BluetoothConnected
+                                        },
+                                        contentDescription = "Active transport",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
                         }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Button(
                                 onClick = onPickVideoFile,
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(54.dp)
+                                    .weight(1.15f)
+                                    .height(52.dp)
                                     .minimumInteractiveComponentSize()
                                     .testTag("add_video_button")
                             ) {
-                                Icon(Icons.Filled.AddCircle, contentDescription = null)
+                                Icon(Icons.Filled.AddCircle, contentDescription = null, modifier = Modifier.size(19.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.action_add_video))
+                                Text(stringResource(R.string.action_add_video), maxLines = 1)
                             }
 
                             FilledTonalButton(
                                 onClick = onPickFolder,
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                                    contentColor = MaterialTheme.colorScheme.onSurface
                                 ),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(54.dp)
+                                    .height(52.dp)
                                     .minimumInteractiveComponentSize()
                                     .testTag("pick_folder_button")
                             ) {
-                                Icon(Icons.Filled.FolderOpen, contentDescription = null)
+                                Icon(Icons.Filled.FolderOpen, contentDescription = null, modifier = Modifier.size(19.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.action_pick_folder))
+                                Text(stringResource(R.string.action_pick_folder), maxLines = 1)
                             }
                         }
 
                         if (isScanning) {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(4.dp))
+                            )
                         }
                     }
                 }
@@ -471,7 +514,7 @@ fun DeckLibraryScreen(
                                     text = if (selectedPlaylist != null) {
                                         "Playlist \"${selectedPlaylist.name}\" is empty"
                                     } else {
-                                        "Your Car Video Deck is empty"
+                                        "Your Cabin Video Deck is empty"
                                     },
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -480,7 +523,7 @@ fun DeckLibraryScreen(
                                     text = if (selectedPlaylist != null) {
                                         "Use the menu button on any video in All Videos to add items to this playlist."
                                     } else {
-                                        "Tap Add Video or Pick Folder to load MP4, MKV, HEVC, or WebM files from your OnePlus 15R. Resume positions and tracks sync automatically."
+                                        "Tap Add Video or Pick Folder to load MP4, MKV, HEVC, or WebM files. Resume positions and tracks sync automatically."
                                     },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -610,10 +653,10 @@ private fun VideoDeckCard(
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.large)
             .clickable { onPlay() }
             .testTag("video_card_${video.id}")
     ) {
@@ -624,8 +667,8 @@ private fun VideoDeckCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(width = 104.dp, height = 62.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(width = 116.dp, height = 68.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center
                 ) {
@@ -645,9 +688,10 @@ private fun VideoDeckCard(
                     }
                     Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(32.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.78f)),
+                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.8f))
+                            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -657,9 +701,25 @@ private fun VideoDeckCard(
                             modifier = Modifier.size(18.dp)
                         )
                     }
+                    if (video.durationMs > 0L) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.background.copy(alpha = 0.85f),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(4.dp)
+                        ) {
+                            Text(
+                                text = formatDuration(video.durationMs),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
 
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(
                         text = video.displayName,
                         style = MaterialTheme.typography.titleMedium,
@@ -669,13 +729,19 @@ private fun VideoDeckCard(
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "${video.resolutionLabel} • ${formatDuration(video.durationMs)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = video.resolutionLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                         Icon(
                             imageVector = Icons.Filled.CloudDone,
                             contentDescription = "Cloud synced",

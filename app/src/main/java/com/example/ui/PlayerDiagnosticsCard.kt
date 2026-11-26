@@ -98,12 +98,12 @@ fun PlayerDiagnosticsCard() {
 
             // Status Banner
             val bannerColor = if (!hasDecoderError && isHardwareDecoder) {
-                MaterialTheme.colorScheme.primaryContainer
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
             } else {
                 MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
             }
             val bannerTextColor = if (!hasDecoderError && isHardwareDecoder) {
-                MaterialTheme.colorScheme.onPrimaryContainer
+                MaterialTheme.colorScheme.onSecondaryContainer
             } else {
                 MaterialTheme.colorScheme.onSurface
             }

@@ -60,7 +60,7 @@ object SafetyGateManager {
     private var locationCallback: LocationCallback? = null
     private var powerManager: PowerManager? = null
     private var appContext: Context? = null
-    private var onBlockTriggered: ((Boolean, String?) -> Unit)? = null
+    private val blockListeners = java.util.concurrent.CopyOnWriteArraySet<(Boolean, String?) -> Unit>()
 
     fun setAudioDriveMode(enabled: Boolean) {
         _state.update { it.copy(audioDriveModeEnabled = enabled) }
@@ -73,10 +73,20 @@ object SafetyGateManager {
 
     fun initialize(context: Context, onBlockChanged: (Boolean, String?) -> Unit) {
         appContext = context.applicationContext
-        onBlockTriggered = onBlockChanged
+        blockListeners.add(onBlockChanged)
         powerManager = appContext?.getSystemService(PowerManager::class.java)
         refreshThermalStatus()
         startLocationUpdatesIfPermitted()
+    }
+
+    fun removeBlockListener(listener: (Boolean, String?) -> Unit) {
+        blockListeners.remove(listener)
+    }
+
+    private fun notifyListeners(blocked: Boolean, reason: String?) {
+        blockListeners.forEach { listener ->
+            runCatching { listener.invoke(blocked, reason) }
+        }
     }
 
     fun startLocationUpdatesIfPermitted() {
@@ -162,7 +172,7 @@ object SafetyGateManager {
                 blockReason = null
             )
         }
-        onBlockTriggered?.invoke(false, null)
+        notifyListeners(false, null)
     }
 
     fun refreshThermalStatus() {
@@ -194,7 +204,7 @@ object SafetyGateManager {
                 blockReason = reason
             )
         }
-        onBlockTriggered?.invoke(blocked, reason)
+        notifyListeners(blocked, reason)
     }
 
     fun stop() {

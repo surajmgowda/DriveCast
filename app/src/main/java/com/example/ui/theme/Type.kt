@@ -9,15 +9,16 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 
 val DisplayFontFamily = FontFamily(
-    Font(R.font.space_grotesk, FontWeight.Normal),
-    Font(R.font.space_grotesk, FontWeight.Medium),
-    Font(R.font.space_grotesk, FontWeight.Bold)
+    Font(R.font.outfit, FontWeight.Normal),
+    Font(R.font.outfit, FontWeight.Medium),
+    Font(R.font.outfit, FontWeight.SemiBold),
+    Font(R.font.outfit, FontWeight.Bold)
 )
 
 val BodyFontFamily = FontFamily(
-    Font(R.font.plus_jakarta_sans, FontWeight.Normal),
-    Font(R.font.plus_jakarta_sans, FontWeight.Medium),
-    Font(R.font.plus_jakarta_sans, FontWeight.SemiBold)
+    Font(R.font.manrope, FontWeight.Normal),
+    Font(R.font.manrope, FontWeight.Medium),
+    Font(R.font.manrope, FontWeight.SemiBold)
 )
 
 val MonoFontFamily = FontFamily(
@@ -31,20 +32,21 @@ val VideoDeckTypography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 32.sp,
         lineHeight = 38.sp,
-        letterSpacing = (-0.5).sp
+        letterSpacing = (-0.6).sp
     ),
     headlineMedium = TextStyle(
         fontFamily = DisplayFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 24.sp,
         lineHeight = 30.sp,
-        letterSpacing = (-0.25).sp
+        letterSpacing = (-0.3).sp
     ),
     headlineSmall = TextStyle(
         fontFamily = DisplayFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
-        lineHeight = 26.sp
+        lineHeight = 26.sp,
+        letterSpacing = (-0.2).sp
     ),
     titleLarge = TextStyle(
         fontFamily = DisplayFontFamily,
@@ -55,8 +57,8 @@ val VideoDeckTypography = Typography(
     titleMedium = TextStyle(
         fontFamily = BodyFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 16.sp,
-        lineHeight = 22.sp
+        fontSize = 15.sp,
+        lineHeight = 21.sp
     ),
     bodyLarge = TextStyle(
         fontFamily = BodyFontFamily,
@@ -68,7 +70,13 @@ val VideoDeckTypography = Typography(
         fontFamily = BodyFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
-        lineHeight = 18.sp
+        lineHeight = 19.sp
+    ),
+    bodySmall = TextStyle(
+        fontFamily = BodyFontFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 17.sp
     ),
     labelLarge = TextStyle(
         fontFamily = BodyFontFamily,

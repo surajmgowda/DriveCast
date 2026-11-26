@@ -101,6 +101,10 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
     private val sessionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var speedListener: OnCarDataAvailableListener<Speed>? = null
     private var carScreen: CarPlayerScreen? = null
+    private val safetyGateListener: (Boolean, String?) -> Unit = { blocked, reason ->
+        VideoSinkRouter.onSafetyGateChanged(blocked, reason)
+        carScreen?.invalidate()
+    }
 
     private val surfaceCallback = object : SurfaceCallback {
         override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
@@ -117,6 +121,9 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
                 height = surfaceContainer.height
             )
             SafetyGateManager.updateCarSessionActive(true)
+            if (PlayerController.uiState.value.activeVideoId != null) {
+                VideoSinkRouter.ensureActiveSurfaceAttached()
+            }
         }
 
         override fun onVisibleAreaChanged(visibleArea: Rect) {
@@ -165,10 +172,7 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
 
         PlayerController.ensureServiceConnected(carContext)
         PlayerController.ensureLibraryHydrated(carContext)
-        SafetyGateManager.initialize(carContext) { blocked, reason ->
-            VideoSinkRouter.onSafetyGateChanged(blocked, reason)
-            carScreen?.invalidate()
-        }
+        SafetyGateManager.initialize(carContext, safetyGateListener)
 
         carContext.getCarService(AppManager::class.java).setSurfaceCallback(surfaceCallback)
         subscribeCarSpeed()
@@ -207,6 +211,7 @@ class VideoDeckCarSession : Session(), DefaultLifecycleObserver {
         CarDiagnosticLogger.log(source = "CarSession", message = "Lifecycle onDestroy()", level = DiagLevel.EVENT)
         CarDiagnosticLogger.updateSessionInfo(active = false)
         unsubscribeCarSpeed()
+        SafetyGateManager.removeBlockListener(safetyGateListener)
         SafetyGateManager.updateCarSessionActive(false)
         sessionScope.cancel()
         super.onDestroy(owner)

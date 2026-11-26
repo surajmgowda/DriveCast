@@ -2,6 +2,7 @@ package com.example.player
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import androidx.annotation.OptIn
@@ -96,10 +97,21 @@ object PlayerController {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var positionTickerJob: Job? = null
 
+    private data class PendingPlayRequest(
+        val queue: List<SyncedVideoEntry>,
+        val startIndex: Int,
+        val resolveUri: (SyncedVideoEntry) -> Uri,
+        val autoResume: Boolean
+    )
+
     private var appContext: Context? = null
     private var boundExoPlayer: ExoPlayer? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var mediaController: MediaController? = null
+    private var pendingPlayRequest: PendingPlayRequest? = null
+    private var pendingAutoPlayNext: Boolean? = null
+    private var pendingQualityProfile: QualityProfile? = null
+    private var safetyListener: ((Boolean, String?) -> Unit)? = null
 
     private var currentQueue: MutableList<SyncedVideoEntry> = mutableListOf()
     private var externalSubtitleCues: List<ExternalSubtitleCue> = emptyList()
@@ -114,9 +126,16 @@ object PlayerController {
     private val _librarySnapshot = MutableStateFlow<List<SyncedVideoEntry>>(emptyList())
     val librarySnapshot: StateFlow<List<SyncedVideoEntry>> = _librarySnapshot.asStateFlow()
 
+    fun initAppContext(context: Context) {
+        val appCtx = context.applicationContext
+        appContext = appCtx
+        ensureLibraryHydrated(appCtx)
+    }
+
     fun ensureServiceConnected(context: Context) {
         val appCtx = context.applicationContext
         appContext = appCtx
+        runCatching { appCtx.startService(Intent(appCtx, VideoDeckPlaybackService::class.java)) }
         if (mediaController != null || controllerFuture != null) return
         val token = SessionToken(
             appCtx,
@@ -128,6 +147,7 @@ object PlayerController {
             try {
                 mediaController = future.get()
             } catch (e: Exception) {
+                controllerFuture = null
                 Log.w(TAG, "MediaController connection error: ${e.message}")
             }
         }, MoreExecutors.directExecutor())
@@ -156,17 +176,21 @@ object PlayerController {
     }
 
     fun setAutoPlayNextEnabled(enabled: Boolean) {
+        pendingAutoPlayNext = enabled
         boundExoPlayer?.pauseAtEndOfMediaItems = !enabled
     }
 
     fun bindPlayer(context: Context, player: ExoPlayer) {
         appContext = context.applicationContext
         boundExoPlayer = player
-        SafetyGateManager.initialize(context) { _, _ ->
+        safetyListener?.let { SafetyGateManager.removeBlockListener(it) }
+        val listener: (Boolean, String?) -> Unit = { _, _ ->
             if (SafetyGateManager.shouldPausePlayback() && player.isPlaying) {
                 player.pause()
             }
         }
+        safetyListener = listener
+        SafetyGateManager.initialize(context, listener)
 
         if (player.audioSessionId != C.AUDIO_SESSION_ID_UNSET && player.audioSessionId > 0) {
             AudioEqualizerEngine.attachToAudioSession(player.audioSessionId)
@@ -191,11 +215,11 @@ object PlayerController {
                     message = "Playback state -> $stateLabel",
                     level = PlayerDiagLevel.INFO
                 )
-                if (playbackState == Player.STATE_READY &&
-                    player.audioSessionId != C.AUDIO_SESSION_ID_UNSET &&
-                    player.audioSessionId > 0
-                ) {
-                    AudioEqualizerEngine.attachToAudioSession(player.audioSessionId)
+                if (playbackState == Player.STATE_READY) {
+                    if (player.audioSessionId != C.AUDIO_SESSION_ID_UNSET && player.audioSessionId > 0) {
+                        AudioEqualizerEngine.attachToAudioSession(player.audioSessionId)
+                    }
+                    VideoSinkRouter.ensureActiveSurfaceAttached()
                 }
                 if (playbackState == Player.STATE_ENDED) {
                     CabinUtilityManager.onVideoPlaybackEnded()
@@ -319,6 +343,27 @@ object PlayerController {
                 _uiState.update { it.copy(droppedFrames = it.droppedFrames + droppedFrames) }
             }
         })
+
+        pendingAutoPlayNext?.let { player.pauseAtEndOfMediaItems = !it }
+        pendingQualityProfile?.let { applyQualityProfile(it) }
+        val pending = pendingPlayRequest
+        pendingPlayRequest = null
+        if (pending != null) {
+            playVideoQueue(pending.queue, pending.startIndex, pending.resolveUri, pending.autoResume)
+        }
+    }
+
+    fun unbindPlayer(player: ExoPlayer) {
+        if (boundExoPlayer === player) {
+            positionTickerJob?.cancel()
+            positionTickerJob = null
+            boundExoPlayer = null
+        }
+        safetyListener?.let { SafetyGateManager.removeBlockListener(it) }
+        safetyListener = null
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        controllerFuture = null
+        mediaController = null
     }
 
     fun getExoPlayer(): ExoPlayer? = boundExoPlayer
@@ -347,7 +392,35 @@ object PlayerController {
         val safeIdx = startIndex.coerceIn(0, currentQueue.lastIndex)
         val target = currentQueue[safeIdx]
 
-        val player = boundExoPlayer ?: return
+        externalSubtitleCues = emptyList()
+        _cuesFlow.value = emptyList()
+        _uiState.update {
+            it.copy(
+                activeVideoId = target.id,
+                activeUriString = target.uriString,
+                title = target.displayName,
+                aspectMode = AspectMode.fromRaw(target.aspectMode),
+                playbackSpeed = target.playbackSpeed.toFloat(),
+                audioDelayMs = target.audioDelayMs,
+                playlistSize = currentQueue.size,
+                currentIndex = safeIdx,
+                queue = currentQueue.toList(),
+                externalSubtitleName = null,
+                externalSubtitleCount = 0,
+                abLoopStartMs = null,
+                abLoopEndMs = null,
+                droppedFrames = 0,
+                errorMessage = null
+            )
+        }
+
+        val player = boundExoPlayer
+        if (player == null) {
+            pendingPlayRequest = PendingPlayRequest(queue, startIndex, resolveUri, autoResume)
+            appContext?.let { ensureServiceConnected(it) }
+            return
+        }
+
         val mediaItems = currentQueue.map { entry -> buildMediaItem(entry, resolveUri(entry)) }
 
         val startPos = if (autoResume && target.lastPositionMs > 2000L &&
@@ -370,28 +443,6 @@ object PlayerController {
         if (!SafetyGateManager.shouldPausePlayback()) {
             player.play()
         }
-
-        externalSubtitleCues = emptyList()
-        _cuesFlow.value = emptyList()
-        _uiState.update {
-            it.copy(
-                activeVideoId = target.id,
-                activeUriString = target.uriString,
-                title = target.displayName,
-                aspectMode = AspectMode.fromRaw(target.aspectMode),
-                playbackSpeed = target.playbackSpeed.toFloat(),
-                audioDelayMs = target.audioDelayMs,
-                playlistSize = currentQueue.size,
-                currentIndex = safeIdx,
-                queue = currentQueue.toList(),
-                externalSubtitleName = null,
-                externalSubtitleCount = 0,
-                abLoopStartMs = null,
-                abLoopEndMs = null,
-                droppedFrames = 0,
-                errorMessage = null
-            )
-        }
         updateWidgetSnapshot()
     }
 
@@ -410,8 +461,8 @@ object PlayerController {
     }
 
     fun addToQueueNext(entry: SyncedVideoEntry, resolveUri: (SyncedVideoEntry) -> Uri): Boolean {
-        val player = boundExoPlayer ?: return false
-        if (currentQueue.isEmpty() || player.mediaItemCount == 0) {
+        val player = boundExoPlayer
+        if (player == null || currentQueue.isEmpty() || player.mediaItemCount == 0) {
             playVideoQueue(listOf(entry), 0, resolveUri, autoResume = true)
             return true
         }
@@ -428,8 +479,8 @@ object PlayerController {
     }
 
     fun addToQueueEnd(entry: SyncedVideoEntry, resolveUri: (SyncedVideoEntry) -> Uri): Boolean {
-        val player = boundExoPlayer ?: return false
-        if (currentQueue.isEmpty() || player.mediaItemCount == 0) {
+        val player = boundExoPlayer
+        if (player == null || currentQueue.isEmpty() || player.mediaItemCount == 0) {
             playVideoQueue(listOf(entry), 0, resolveUri, autoResume = true)
             return true
         }
@@ -483,6 +534,7 @@ object PlayerController {
     }
 
     fun applyQualityProfile(profile: QualityProfile) {
+        pendingQualityProfile = profile
         val player = boundExoPlayer ?: return
         val params = player.trackSelectionParameters.buildUpon()
             .setMaxVideoSize(Int.MAX_VALUE, profile.maxHeight)

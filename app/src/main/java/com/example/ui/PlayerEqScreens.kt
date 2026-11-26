@@ -6,7 +6,10 @@ import android.content.ContextWrapper
 import android.graphics.Color as AndroidColor
 import android.media.AudioManager
 import android.provider.Settings
+import android.view.Gravity
 import android.view.SurfaceView
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -30,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -45,6 +49,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
@@ -60,11 +65,14 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -88,6 +96,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -98,11 +107,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.Player
 import androidx.media3.common.text.Cue
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
-import androidx.compose.foundation.layout.requiredSize
 import com.example.R
 import com.example.car.CabinUtilityState
 import com.example.data.AspectMode
@@ -587,59 +597,109 @@ private fun VideoSurfaceViewport(
             ),
         contentAlignment = Alignment.Center
     ) {
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            val boxW = maxWidth
-            val boxH = maxHeight
-            val boxAspect = if (boxH.value > 0f) boxW.value / boxH.value else 16f / 9f
+        AndroidView(
+            factory = { ctx ->
+                AspectRatioFrameLayout(ctx).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    val sv = SurfaceView(ctx).apply {
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            Gravity.CENTER
+                        )
+                    }
+                    addView(sv)
+                    tag = sv
+                    VideoSinkRouter.phoneSink.bindSurfaceView(sv)
+                }
+            },
+            update = { frame ->
+                val sv = frame.tag as? SurfaceView
+                VideoSinkRouter.phoneSink.bindSurfaceView(sv)
+                when (playerState.aspectMode) {
+                    AspectMode.FIT -> {
+                        frame.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        frame.setAspectRatio(videoAspect)
+                    }
+                    AspectMode.FILL -> {
+                        frame.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        frame.setAspectRatio(videoAspect)
+                    }
+                    AspectMode.ZOOM -> {
+                        frame.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        frame.setAspectRatio(videoAspect * 1.18f)
+                    }
+                    AspectMode.ULTRAWIDE_21_9 -> {
+                        frame.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        frame.setAspectRatio(21f / 9f)
+                    }
+                    AspectMode.STRETCH -> {
+                        frame.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                        frame.setAspectRatio(videoAspect)
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
 
-            val surfaceModifier = when (playerState.aspectMode) {
-                AspectMode.FIT -> {
-                    if (videoAspect > boxAspect) {
-                        Modifier.requiredSize(width = boxW, height = boxW / videoAspect)
-                    } else {
-                        Modifier.requiredSize(width = boxH * videoAspect, height = boxH)
-                    }
+        if (playerState.activeUriString == null && !isInPipMode) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(20.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f))
+                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Movie,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
                 }
-                AspectMode.FILL -> {
-                    if (videoAspect > boxAspect) {
-                        Modifier.requiredSize(width = boxH * videoAspect, height = boxH)
-                    } else {
-                        Modifier.requiredSize(width = boxW, height = boxW / videoAspect)
-                    }
-                }
-                AspectMode.ZOOM -> {
-                    val zoom = 1.22f
-                    if (videoAspect > boxAspect) {
-                        Modifier.requiredSize(width = boxH * videoAspect * zoom, height = boxH * zoom)
-                    } else {
-                        Modifier.requiredSize(width = boxW * zoom, height = (boxW / videoAspect) * zoom)
-                    }
-                }
-                AspectMode.ULTRAWIDE_21_9 -> {
-                    val targetRatio = 21f / 9f
-                    if (videoAspect > targetRatio) {
-                        Modifier.requiredSize(width = boxW, height = boxW / targetRatio)
-                    } else {
-                        Modifier.requiredSize(width = boxW, height = boxW / targetRatio)
-                    }
-                }
-                AspectMode.STRETCH -> Modifier.fillMaxSize()
+                Text(
+                    text = "Ready for Cinema Playback",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Pick a clip or movie from Deck to start hardware decoding",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
             }
-
-            AndroidView(
-                factory = { ctx ->
-                    SurfaceView(ctx).apply {
-                        VideoSinkRouter.phoneSink.bindSurfaceView(this)
-                    }
-                },
-                update = { view ->
-                    VideoSinkRouter.phoneSink.bindSurfaceView(view)
-                },
-                modifier = surfaceModifier
-            )
+        } else if (playerState.playbackState == Player.STATE_BUFFERING && !safetyState.isBlocked && !isInPipMode) {
+            Surface(
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), RoundedCornerShape(50))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Buffering MediaCodec...",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
 
         // Real-time styled Media3 SubtitleView overlay
@@ -1020,6 +1080,23 @@ private fun PlayerTransportPanel(
     onToggleRemoteMode: () -> Unit,
     onOpenDeck: () -> Unit
 ) {
+    val playbackBadgeText = when {
+        playerState.activeUriString == null -> "STANDBY"
+        playerState.playbackState == Player.STATE_BUFFERING -> "BUFFER"
+        playerState.isPlaying -> "PLAYING"
+        else -> "PAUSED"
+    }
+    val playbackBadgeBg = when {
+        playerState.isPlaying -> MaterialTheme.colorScheme.secondaryContainer
+        playerState.playbackState == Player.STATE_BUFFERING -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val playbackBadgeFg = when {
+        playerState.isPlaying -> MaterialTheme.colorScheme.secondary
+        playerState.playbackState == Player.STATE_BUFFERING -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = MaterialTheme.shapes.large,
@@ -1029,14 +1106,14 @@ private fun PlayerTransportPanel(
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
                         text = playerState.title,
                         style = MaterialTheme.typography.titleLarge,
@@ -1053,8 +1130,27 @@ private fun PlayerTransportPanel(
                     )
                 }
                 if (playerState.activeUriString == null) {
-                    TextButton(onClick = onOpenDeck) {
+                    FilledTonalButton(
+                        onClick = onOpenDeck,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    ) {
                         Text("Pick Video")
+                    }
+                } else {
+                    Surface(
+                        color = playbackBadgeBg,
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Text(
+                            text = playbackBadgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = playbackBadgeFg,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
                     }
                 }
             }
@@ -1062,14 +1158,14 @@ private fun PlayerTransportPanel(
             if (playerState.errorMessage != null) {
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = playerState.errorMessage,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(10.dp)
+                        modifier = Modifier.padding(12.dp)
                     )
                 }
             }
@@ -1077,7 +1173,7 @@ private fun PlayerTransportPanel(
             if (playerState.abLoopStartMs != null) {
                 Surface(
                     color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -1099,14 +1195,22 @@ private fun PlayerTransportPanel(
             }
 
             val duration = playerState.durationMs.coerceAtLeast(1L)
-            Column {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
                 Slider(
                     value = playerState.positionMs.coerceIn(0L, duration).toFloat(),
                     onValueChange = { PlayerController.seekTo(it.toLong()) },
                     valueRange = 0f..duration.toFloat(),
                     colors = SliderDefaults.colors(
                         thumbColor = MaterialTheme.colorScheme.primary,
-                        activeTrackColor = MaterialTheme.colorScheme.primary
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.outline
                     )
                 )
                 Row(
@@ -1116,7 +1220,7 @@ private fun PlayerTransportPanel(
                     Text(
                         text = formatDuration(playerState.positionMs),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
                         text = if (cabinUtility.sleepRemainingSec > 0) {
@@ -1158,10 +1262,11 @@ private fun PlayerTransportPanel(
                 FilledIconButton(
                     onClick = { PlayerController.seekPrevious() },
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(50.dp)
                         .testTag("player_prev_button")
                 ) {
                     Icon(Icons.Filled.SkipPrevious, contentDescription = stringResource(R.string.action_previous))
@@ -1170,43 +1275,60 @@ private fun PlayerTransportPanel(
                 FilledIconButton(
                     onClick = { PlayerController.seekBy(-10_000L) },
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(50.dp)
                         .testTag("player_rewind_button")
                 ) {
                     Icon(Icons.Filled.Replay10, contentDescription = stringResource(R.string.action_seek_back))
                 }
 
-                FilledIconButton(
-                    onClick = { PlayerController.togglePlayPause() },
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
+                Box(
                     modifier = Modifier
-                        .size(64.dp)
-                        .testTag("player_play_pause_button")
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
+                                    Color.Transparent
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = if (playerState.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (playerState.isPlaying) {
-                            stringResource(R.string.action_pause)
-                        } else {
-                            stringResource(R.string.action_play)
-                        },
-                        modifier = Modifier.size(34.dp)
-                    )
+                    FilledIconButton(
+                        onClick = { PlayerController.togglePlayPause() },
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        modifier = Modifier
+                            .size(64.dp)
+                            .testTag("player_play_pause_button")
+                    ) {
+                        Icon(
+                            imageVector = if (playerState.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (playerState.isPlaying) {
+                                stringResource(R.string.action_pause)
+                            } else {
+                                stringResource(R.string.action_play)
+                            },
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
                 }
 
                 FilledIconButton(
                     onClick = { PlayerController.seekBy(10_000L) },
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(50.dp)
                         .testTag("player_forward_button")
                 ) {
                     Icon(Icons.Filled.Forward10, contentDescription = stringResource(R.string.action_seek_forward))
@@ -1215,10 +1337,11 @@ private fun PlayerTransportPanel(
                 FilledIconButton(
                     onClick = { PlayerController.seekNext() },
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(50.dp)
                         .testTag("player_next_button")
                 ) {
                     Icon(Icons.Filled.SkipNext, contentDescription = stringResource(R.string.action_next))
@@ -1231,25 +1354,39 @@ private fun PlayerTransportPanel(
             ) {
                 FilledTonalButton(
                     onClick = { PlayerController.cycleAspectMode() },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
                         .testTag("aspect_ratio_button")
                 ) {
-                    Icon(Icons.Filled.AspectRatio, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Filled.AspectRatio, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(5.dp))
                     Text(playerState.aspectMode.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
                 FilledTonalButton(
                     onClick = onOpenTracks,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (playerState.externalSubtitleName != null) {
+                            MaterialTheme.colorScheme.tertiaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
                         .testTag("tracks_button")
                 ) {
-                    Icon(Icons.Filled.Subtitles, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Filled.Subtitles, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.tertiary)
+                    Spacer(Modifier.width(5.dp))
                     Text(
                         text = if (playerState.externalSubtitleName != null) "Ext Sub" else "Subs",
                         maxLines = 1,
@@ -1259,13 +1396,27 @@ private fun PlayerTransportPanel(
 
                 FilledTonalButton(
                     onClick = onOpenLiveEq,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (eqState.isEnabled) {
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     modifier = Modifier
                         .weight(1.1f)
                         .height(48.dp)
                         .testTag("live_eq_button")
                 ) {
-                    Icon(Icons.Filled.GraphicEq, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        Icons.Filled.GraphicEq,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = if (eqState.isEnabled) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(5.dp))
                     Text(
                         text = if (eqState.isEnabled) "Live EQ" else "EQ Off",
                         maxLines = 1,
@@ -1280,37 +1431,52 @@ private fun PlayerTransportPanel(
             ) {
                 FilledTonalButton(
                     onClick = onOpenQueue,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     modifier = Modifier
                         .weight(1.1f)
                         .height(48.dp)
                         .testTag("queue_sleep_button")
                 ) {
                     Icon(Icons.Filled.QueueMusic, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(5.dp))
                     Text("Queue (${playerState.queue.size})", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
                 FilledTonalButton(
                     onClick = onOpenBookmarksAndDisplay,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     modifier = Modifier
                         .weight(1.1f)
                         .height(48.dp)
                         .testTag("bookmarks_loop_button")
                 ) {
                     Icon(Icons.Filled.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(5.dp))
                     Text("Marks (${bookmarks.size})", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
                 FilledTonalButton(
                     onClick = onEnterPip,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     modifier = Modifier
                         .weight(0.85f)
                         .height(48.dp)
                         .testTag("pip_button")
                 ) {
                     Icon(Icons.Filled.PictureInPictureAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(5.dp))
                     Text("PiP", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -1321,6 +1487,15 @@ private fun PlayerTransportPanel(
             ) {
                 FilledTonalButton(
                     onClick = onToggleTouchLock,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (isTouchLocked) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
@@ -1331,12 +1506,21 @@ private fun PlayerTransportPanel(
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(5.dp))
                     Text(if (isTouchLocked) "Locked" else "Touch Lock", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
                 FilledTonalButton(
                     onClick = onCycleOrientation,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (orientationLock != OrientationLockMode.AUTO) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
                     modifier = Modifier
                         .weight(1f)
                         .height(48.dp)
@@ -1351,20 +1535,29 @@ private fun PlayerTransportPanel(
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
-                    Spacer(Modifier.width(4.dp))
+                    Spacer(Modifier.width(5.dp))
                     Text(orientationLock.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
 
                 if (isExternalSink) {
                     FilledTonalButton(
                         onClick = onToggleRemoteMode,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (remoteModeActive) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
                             .testTag("remote_mode_button")
                     ) {
                         Icon(Icons.Filled.TouchApp, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(5.dp))
                         Text(if (remoteModeActive) "Preview" else "Remote", maxLines = 1)
                     }
                 }
@@ -1378,24 +1571,49 @@ private fun PlayerTransportPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                    val selected = kotlin.math.abs(playerState.playbackSpeed - speed) < 0.05f
                     FilterChip(
-                        selected = kotlin.math.abs(playerState.playbackSpeed - speed) < 0.05f,
+                        selected = selected,
                         onClick = { PlayerController.setPlaybackSpeed(speed) },
-                        label = { Text("${speed}x") }
+                        label = { Text("${speed}x") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.primary
+                        )
                     )
                 }
             }
 
-            Column {
-                Text(
-                    text = "Car Audio Sync Offset: ${playerState.audioDelayMs} ms",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Car Audio Sync Offset",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${playerState.audioDelayMs} ms",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 Slider(
                     value = playerState.audioDelayMs.toFloat(),
                     onValueChange = { PlayerController.setAudioDelayMs(it.toInt()) },
-                    valueRange = -300f..300f
+                    valueRange = -300f..300f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = MaterialTheme.colorScheme.tertiary,
+                        activeTrackColor = MaterialTheme.colorScheme.tertiary
+                    )
                 )
             }
         }

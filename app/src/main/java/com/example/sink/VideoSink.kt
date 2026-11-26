@@ -58,6 +58,7 @@ class PhoneSurfaceSink : VideoSink {
 
     private var surfaceView: SurfaceView? = null
     private var attachedPlayer: Player? = null
+    private var lastBoundPlayerToView: Player? = null
     private var blanked: Boolean = false
 
     override val isAvailable: Boolean
@@ -66,39 +67,67 @@ class PhoneSurfaceSink : VideoSink {
     private val holderCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
             if (!blanked) {
-                attachedPlayer?.setVideoSurfaceView(surfaceView)
+                val player = attachedPlayer
+                val view = surfaceView
+                if (player != null && view != null) {
+                    player.setVideoSurfaceView(view)
+                    lastBoundPlayerToView = player
+                }
             }
         }
 
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             this@PhoneSurfaceSink.width = width
             this@PhoneSurfaceSink.height = height
+            if (!blanked) {
+                val player = attachedPlayer
+                val view = surfaceView
+                if (player != null && view != null && lastBoundPlayerToView !== player) {
+                    player.setVideoSurfaceView(view)
+                    lastBoundPlayerToView = player
+                }
+            }
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
             attachedPlayer?.clearVideoSurfaceView(surfaceView)
+            lastBoundPlayerToView = null
         }
     }
 
     fun bindSurfaceView(view: SurfaceView?) {
-        if (surfaceView === view) return
+        if (surfaceView === view) {
+            val player = attachedPlayer
+            if (view != null && player != null && !blanked && lastBoundPlayerToView !== player) {
+                player.setVideoSurfaceView(view)
+                lastBoundPlayerToView = player
+            }
+            return
+        }
         surfaceView?.holder?.removeCallback(holderCallback)
         attachedPlayer?.clearVideoSurfaceView(surfaceView)
+        lastBoundPlayerToView = null
         surfaceView = view
         if (view != null) {
             width = view.width
             height = view.height
             view.holder.addCallback(holderCallback)
             if (!blanked) {
-                attachedPlayer?.setVideoSurfaceView(view)
+                val player = attachedPlayer
+                if (player != null) {
+                    player.setVideoSurfaceView(view)
+                    lastBoundPlayerToView = player
+                }
             }
         }
     }
 
     override fun attachPlayer(player: Player) {
         attachedPlayer = player
-        if (!blanked) {
-            surfaceView?.let { player.setVideoSurfaceView(it) }
+        val view = surfaceView
+        if (!blanked && view != null) {
+            player.setVideoSurfaceView(view)
+            lastBoundPlayerToView = player
         }
     }
 
@@ -109,6 +138,9 @@ class PhoneSurfaceSink : VideoSink {
         if (attachedPlayer === player) {
             attachedPlayer = null
         }
+        if (lastBoundPlayerToView === player) {
+            lastBoundPlayerToView = null
+        }
     }
 
     override fun setBlanked(blanked: Boolean, reason: String?) {
@@ -117,8 +149,10 @@ class PhoneSurfaceSink : VideoSink {
         val view = surfaceView ?: return
         if (blanked) {
             player.clearVideoSurfaceView(view)
+            lastBoundPlayerToView = null
         } else if (view.holder.surface.isValid) {
             player.setVideoSurfaceView(view)
+            lastBoundPlayerToView = player
         }
     }
 
@@ -127,6 +161,7 @@ class PhoneSurfaceSink : VideoSink {
         surfaceView?.let { attachedPlayer?.clearVideoSurfaceView(it) }
         surfaceView = null
         attachedPlayer = null
+        lastBoundPlayerToView = null
     }
 }
 

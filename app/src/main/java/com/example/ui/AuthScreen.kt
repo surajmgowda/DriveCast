@@ -231,109 +231,148 @@ fun AuthScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                        MaterialTheme.colorScheme.background
-                    )
-                )
-            )
-            .safeDrawingPadding()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        Card(
+        // Atmospheric Carbon Tourer Hero Header
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = R.drawable.img_cockpit_hero),
+            contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 520.dp)
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outline,
-                    shape = MaterialTheme.shapes.extraLarge
-                ),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = MaterialTheme.shapes.extraLarge
-        ) {
-            Column(
-                modifier = Modifier.padding(28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = stringResource(R.string.app_name),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(38.dp)
+                .height(290.dp)
+                .align(Alignment.TopCenter)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(310.dp)
+                .align(Alignment.TopCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.25f),
+                            MaterialTheme.colorScheme.background.copy(alpha = 0.78f),
+                            MaterialTheme.colorScheme.background
+                        )
                     )
+                )
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .padding(horizontal = 24.dp, vertical = 20.dp)
+                .widthIn(max = 540.dp)
+                .align(Alignment.Center),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Top Editorial Cockpit Brand Header
+            Column(
+                modifier = Modifier.padding(top = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.border(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+                        RoundedCornerShape(50)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                        Text(
+                            text = "CARBON TOURER EDITION",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
 
                 Text(
                     text = stringResource(R.string.app_name),
                     style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onBackground
                 )
 
                 Text(
                     text = stringResource(R.string.app_tagline),
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center
+                    color = MaterialTheme.colorScheme.primary
                 )
 
                 Text(
                     text = stringResource(R.string.sign_in_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
 
-                Column(
+            // Asymmetric 2x2 Capability Grid + Action Card
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    AuthFeatureRow(
+                    AuthFeatureTile(
                         icon = Icons.Filled.DirectionsCar,
-                        text = "Android Auto & MG Windsor Pro EV surface bridge"
+                        title = "Android Auto",
+                        subtitle = "CarApp Surface",
+                        modifier = Modifier.weight(1f)
                     )
-                    AuthFeatureRow(
+                    AuthFeatureTile(
                         icon = Icons.Filled.Usb,
-                        text = "Hardware-accelerated USB-C & low-latency wireless sinks"
+                        title = "USB-C Display",
+                        subtitle = "Zero-Copy Link",
+                        modifier = Modifier.weight(1f)
                     )
-                    AuthFeatureRow(
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AuthFeatureTile(
                         icon = Icons.Filled.GraphicEq,
-                        text = "5-band cabin equalizer & cloud-synced resume state"
+                        title = "Cabin DSP",
+                        subtitle = "5-Band Live EQ",
+                        modifier = Modifier.weight(1f)
                     )
-                    AuthFeatureRow(
+                    AuthFeatureTile(
                         icon = Icons.Filled.Shield,
-                        text = "Fail-closed parked safety gate (auto-blanks > 3 km/h)"
+                        title = "Safety Gate",
+                        subtitle = "3 km/h Auto-Blank",
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
                 if (errorMessage != null) {
                     Surface(
                         color = MaterialTheme.colorScheme.errorContainer,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
                             text = errorMessage!!,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(12.dp)
+                            modifier = Modifier.padding(14.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 val firebaseAvailable = remember { isFirebaseConfigured(context) && resolveDefaultWebClientId(context) != null }
                 if (firebaseAvailable) {
@@ -361,10 +400,10 @@ fun AuthScreen(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(18.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .height(58.dp)
                             .minimumInteractiveComponentSize()
                             .testTag("sign_in_google_button")
                     ) {
@@ -375,6 +414,8 @@ fun AuthScreen(
                                 strokeWidth = 2.5.dp
                             )
                         } else {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                            Spacer(modifier = Modifier.size(8.dp))
                             Text(
                                 text = stringResource(R.string.sign_in_with_google),
                                 style = MaterialTheme.typography.titleMedium
@@ -388,15 +429,17 @@ fun AuthScreen(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(18.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .height(58.dp)
                             .minimumInteractiveComponentSize()
                             .testTag("continue_offline_button")
                     ) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.size(8.dp))
                         Text(
-                            text = "Continue in Offline Car Mode",
+                            text = "Enter Offline Car Cockpit",
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
@@ -407,26 +450,41 @@ fun AuthScreen(
 }
 
 @Composable
-private fun AuthFeatureRow(icon: ImageVector, text: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+private fun AuthFeatureTile(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier.border(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outline,
+            shape = MaterialTheme.shapes.medium
+        )
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.size(20.dp)
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

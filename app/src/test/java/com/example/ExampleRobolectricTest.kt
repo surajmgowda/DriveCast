@@ -49,4 +49,24 @@ class ExampleRobolectricTest {
         PlayerController.ensureLibraryHydrated(context)
         assertTrue(PlayerController.librarySnapshot.value.isNotEmpty())
     }
+
+    @Test
+    fun `playerController queues playback state before service player binds`() {
+        val entry = SyncedVideoEntry(
+            id = "lazy_test_clip",
+            displayName = "Deferred Dash Clip.mp4",
+            uriString = "content://media/external/video/99",
+            durationMs = 90_000L
+        )
+        PlayerController.playVideoQueue(
+            queue = listOf(entry),
+            startIndex = 0,
+            resolveUri = { android.net.Uri.parse(it.uriString) },
+            autoResume = false
+        )
+        val state = PlayerController.uiState.value
+        assertEquals("lazy_test_clip", state.activeVideoId)
+        assertEquals("Deferred Dash Clip.mp4", state.title)
+        assertEquals(1, state.playlistSize)
+    }
 }

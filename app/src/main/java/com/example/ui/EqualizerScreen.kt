@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -356,11 +357,20 @@ private fun EqualizerSessionHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.GraphicEq,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.GraphicEq,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
             Column {
                 Text(
                     text = "Hi-Fi Cabin Equalizer",
@@ -538,8 +548,9 @@ fun EqualizerCurveVisualizer(
                     path = fillPath,
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            activeColor.copy(alpha = 0.28f),
-                            activeColor.copy(alpha = 0.02f)
+                            activeColor.copy(alpha = 0.26f),
+                            secondaryColor.copy(alpha = 0.06f),
+                            activeColor.copy(alpha = 0.01f)
                         ),
                         startY = topPad,
                         endY = topPad + usableH
@@ -548,7 +559,13 @@ fun EqualizerCurveVisualizer(
 
                 drawPath(
                     path = curvePath,
-                    color = activeColor,
+                    brush = Brush.horizontalGradient(
+                        colors = if (eqState.isEnabled) {
+                            listOf(primaryColor, secondaryColor, primaryColor)
+                        } else {
+                            listOf(disabledColor, disabledColor)
+                        }
+                    ),
                     style = Stroke(
                         width = 3.dp.toPx(),
                         cap = StrokeCap.Round,
@@ -559,13 +576,18 @@ fun EqualizerCurveVisualizer(
                 // Band node rings
                 points.forEach { pt ->
                     drawCircle(
-                        color = surfaceBg,
-                        radius = 6.dp.toPx(),
+                        color = activeColor.copy(alpha = 0.22f),
+                        radius = 9.dp.toPx(),
                         center = pt
                     )
                     drawCircle(
-                        color = secondaryColor,
-                        radius = 4.5.dp.toPx(),
+                        color = surfaceBg,
+                        radius = 5.5.dp.toPx(),
+                        center = pt
+                    )
+                    drawCircle(
+                        color = if (eqState.isEnabled) secondaryColor else disabledColor,
+                        radius = 4.dp.toPx(),
                         center = pt
                     )
                 }

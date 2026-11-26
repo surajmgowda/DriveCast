@@ -8,39 +8,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 
 private val VideoDeckDarkColorScheme = darkColorScheme(
-    primary = ElectricCyan,
-    onPrimary = ObsidianBg,
-    primaryContainer = DeepCyanContainer,
-    onPrimaryContainer = OnDeepCyan,
-    secondary = WindsorEmerald,
-    onSecondary = ObsidianBg,
-    secondaryContainer = DeepEmeraldContainer,
-    onSecondaryContainer = OnDeepEmerald,
-    tertiary = AmberWarning,
-    onTertiary = ObsidianBg,
-    tertiaryContainer = DeepAmberContainer,
-    onTertiaryContainer = TextPrimary,
-    error = CoralAlert,
-    onError = TextPrimary,
-    errorContainer = DeepCoralContainer,
-    onErrorContainer = TextPrimary,
-    background = ObsidianBg,
-    onBackground = TextPrimary,
-    surface = SlateSurface,
-    onSurface = TextPrimary,
-    surfaceVariant = SlateSurfaceVariant,
-    onSurfaceVariant = TextSecondary,
-    surfaceContainerLow = SlateSurface,
-    surfaceContainer = SlateSurfaceVariant,
-    surfaceContainerHigh = SlateElevated,
-    outline = SlateOutline
+    primary = SolarCopper,
+    onPrimary = CarbonVoidBg,
+    primaryContainer = DeepBronzeContainer,
+    onPrimaryContainer = OnDeepBronze,
+    secondary = TelemetryJade,
+    onSecondary = CarbonVoidBg,
+    secondaryContainer = DeepJadeContainer,
+    onSecondaryContainer = OnDeepJade,
+    tertiary = AcousticSky,
+    onTertiary = CarbonVoidBg,
+    tertiaryContainer = DeepSkyContainer,
+    onTertiaryContainer = OnDeepSky,
+    error = CrimsonAlert,
+    onError = IvoryPrimary,
+    errorContainer = DeepCrimsonContainer,
+    onErrorContainer = IvoryPrimary,
+    background = CarbonVoidBg,
+    onBackground = IvoryPrimary,
+    surface = SmokedGraphite,
+    onSurface = IvoryPrimary,
+    surfaceVariant = TitaniumSurface,
+    onSurfaceVariant = SilverSecondary,
+    surfaceContainerLow = SmokedGraphite,
+    surfaceContainer = TitaniumSurface,
+    surfaceContainerHigh = BrushedSlate,
+    outline = HairlineTitanium
 )
 
 private val VideoDeckShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(30.dp)
 )
 
 @Composable

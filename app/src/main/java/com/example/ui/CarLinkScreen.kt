@@ -132,7 +132,14 @@ fun CarLinkScreen(
                             "Awaiting Car / External Surface"
                         }
                     )
-                    TelemetryRow("Android Auto Bridge", if (sinkTelemetry.isCarConnected) "Connected (CarAppService)" else "Standby (Enable AA Dev Mode)")
+                    TelemetryRow(
+                        "Android Auto Bridge",
+                        if (sinkTelemetry.isCarConnected) {
+                            "Connected (CarAppService Video)"
+                        } else {
+                            "Standby • Launch from AA App Launcher"
+                        }
+                    )
                     TelemetryRow(
                         "USB-C DisplayPort",
                         transportState.usbPresentationDisplayName?.let {

@@ -77,16 +77,11 @@
             </intent-filter>
         </activity>
 
-        <!-- Background Media3 MediaSessionService for steering wheel, Bluetooth & car audio sync -->
+        <!-- Internal Media3 MediaSessionService for hardware ExoPlayer decoding, PiP, and BT media controls -->
         <service
             android:name=".player.VideoDeckPlaybackService"
-            android:exported="true"
-            android:foregroundServiceType="mediaPlayback"
-            tools:ignore="ExportedService">
-            <intent-filter>
-                <action android:name="androidx.media3.session.MediaSessionService" />
-            </intent-filter>
-        </service>
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <!-- Media button receiver for steering wheel & Bluetooth AVRCP controls -->
         <receiver

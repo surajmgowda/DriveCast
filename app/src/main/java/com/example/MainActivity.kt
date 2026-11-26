@@ -36,16 +36,24 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.PlayCircle
+import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -78,7 +86,6 @@ import com.example.data.LocalMediaLibrary
 import com.example.data.OrientationLockMode
 import com.example.data.SyncRepository
 import com.example.player.PlayerController
-import com.example.player.VideoDeckPlaybackService
 import com.example.safety.SafetyGateManager
 import com.example.ui.AudioEqScreen
 import com.example.ui.AuthScreen
@@ -120,8 +127,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        PlayerController.ensureServiceConnected(this)
-        startService(Intent(this, VideoDeckPlaybackService::class.java))
+        PlayerController.initAppContext(this)
 
         if (intent?.getBooleanExtra(DriveCastResumeWidgetProvider.EXTRA_AUTO_RESUME_LAST, false) == true) {
             widgetResumePendingState.value = true
@@ -415,10 +421,10 @@ fun VideoDeckAppShell(
     }
 
     val navItems = listOf(
-        Triple(RouteDeck, stringResource(R.string.tab_deck), Icons.Filled.VideoLibrary),
-        Triple(RoutePlayer, stringResource(R.string.tab_player), Icons.Filled.PlayCircle),
-        Triple(RouteAudioEq, stringResource(R.string.tab_audio_eq), Icons.Filled.GraphicEq),
-        Triple(RouteCarLink, stringResource(R.string.tab_car_link), Icons.Filled.DirectionsCar)
+        Triple(RouteDeck, stringResource(R.string.tab_deck), Icons.Filled.VideoLibrary to Icons.Outlined.VideoLibrary),
+        Triple(RoutePlayer, stringResource(R.string.tab_player), Icons.Filled.PlayCircle to Icons.Outlined.PlayCircle),
+        Triple(RouteAudioEq, stringResource(R.string.tab_audio_eq), Icons.Filled.GraphicEq to Icons.Outlined.GraphicEq),
+        Triple(RouteCarLink, stringResource(R.string.tab_car_link), Icons.Filled.DirectionsCar to Icons.Outlined.DirectionsCar)
     )
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -430,22 +436,40 @@ fun VideoDeckAppShell(
             contentWindowInsets = if (isInPipMode) WindowInsets(0, 0, 0, 0) else WindowInsets.safeDrawing,
             bottomBar = {
                 if (!useRail && !isInPipMode) {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                        navItems.forEach { (route, label, icon) ->
-                            val selected = currentDest?.hasRoute(route::class) == true
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = {
-                                    navController.navigate(route) {
-                                        popUpTo(RouteDeck) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
-                                icon = { Icon(icon, contentDescription = label) },
-                                label = { Text(label) },
-                                modifier = Modifier.testTag("nav_${label.lowercase().replace(" ", "_")}")
-                            )
+                    Column {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 0.dp
+                        ) {
+                            navItems.forEach { (route, label, icons) ->
+                                val selected = currentDest?.hasRoute(route::class) == true
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = {
+                                        navController.navigate(route) {
+                                            popUpTo(RouteDeck) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    icon = {
+                                        Icon(
+                                            imageVector = if (selected) icons.first else icons.second,
+                                            contentDescription = label
+                                        )
+                                    },
+                                    label = { Text(label) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ),
+                                    modifier = Modifier.testTag("nav_${label.lowercase().replace(" ", "_")}")
+                                )
+                            }
                         }
                     }
                 }
@@ -463,7 +487,7 @@ fun VideoDeckAppShell(
                             .fillMaxHeight()
                             .windowInsetsPadding(WindowInsets(0, 0, 0, 0))
                     ) {
-                        navItems.forEach { (route, label, icon) ->
+                        navItems.forEach { (route, label, icons) ->
                             val selected = currentDest?.hasRoute(route::class) == true
                             NavigationRailItem(
                                 selected = selected,
@@ -474,11 +498,24 @@ fun VideoDeckAppShell(
                                         restoreState = true
                                     }
                                 },
-                                icon = { Icon(icon, contentDescription = label) },
-                                label = { Text(label) }
+                                icon = {
+                                    Icon(
+                                        imageVector = if (selected) icons.first else icons.second,
+                                        contentDescription = label
+                                    )
+                                },
+                                label = { Text(label) },
+                                colors = NavigationRailItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             )
                         }
                     }
+                    VerticalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
                 }
 
                 Column(modifier = Modifier.fillMaxSize()) {
