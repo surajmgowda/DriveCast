@@ -107,14 +107,14 @@ fun CarDiagnosticsCard() {
             AuditStatusRow("Installer Source", audit.installerPackage ?: "Sideloaded (Non-Play APK)")
             AuditStatusRow(
                 "Manifest & Services",
-                "Meta=${audit.hasCarAppMetadata} • CarSvc=${audit.carAppServiceEnabled} • MediaIsolated=${audit.mediaServiceEnabled}"
+                "Meta=${audit.hasCarAppMetadata} • CarSvc=${audit.carAppServiceEnabled} • MediaSvc=${audit.mediaServiceEnabled}"
             )
             AuditStatusRow(
                 "Car Session",
                 if (diagState.sessionActive) {
                     "Active (${diagState.connectedHostPackage ?: "Host"} • API ${diagState.carApiLevel ?: "?"})"
                 } else {
-                    "Standby — Open DriveCast in AA Launcher"
+                    "Awaiting CarAppService / Play Store trust"
                 }
             )
 

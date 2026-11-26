@@ -136,9 +136,6 @@ class VideoDeckPlaybackService : MediaSessionService() {
                     level = com.example.car.DiagLevel.EVENT,
                     context = this@VideoDeckPlaybackService
                 )
-                if (controller.packageName == "com.google.android.projection.gearhead") {
-                    return MediaSession.ConnectionResult.reject()
-                }
                 return MediaSession.ConnectionResult.AcceptedResultBuilder(session).build()
             }
 

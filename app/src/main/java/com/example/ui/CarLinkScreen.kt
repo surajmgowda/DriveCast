@@ -137,7 +137,7 @@ fun CarLinkScreen(
                         if (sinkTelemetry.isCarConnected) {
                             "Connected (CarAppService Video)"
                         } else {
-                            "Standby • Launch from AA App Launcher"
+                            "Standby • Media / CarAppService"
                         }
                     )
                     TelemetryRow(

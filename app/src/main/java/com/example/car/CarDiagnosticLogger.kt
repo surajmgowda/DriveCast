@@ -213,17 +213,17 @@ object CarDiagnosticLogger {
                 pm.getServiceInfo(cn, 0)
             }
         }.getOrNull()
-        val mediaServiceOk = mediaServiceInfo?.enabled == true && mediaServiceInfo.exported == false
+        val mediaServiceOk = mediaServiceInfo?.exported == true && mediaServiceInfo.enabled
 
         val blocker = when {
             !aaInstalled ->
                 "Android Auto (com.google.android.projection.gearhead) is not installed on this phone."
-            !hasCarMeta || !carServiceOk ->
-                "Manifest declaration incomplete (carMeta=$hasCarMeta, carServiceExported=$carServiceOk)."
+            !hasCarMeta || !carServiceOk || !mediaServiceOk ->
+                "Manifest declaration incomplete (carMeta=$hasCarMeta, carSvc=$carServiceOk, mediaSvc=$mediaServiceOk)."
             !isPlayStore ->
-                "App was sideloaded (${installer ?: "PackageInstaller"}). Enable Android Auto Developer Settings -> Unknown sources, restart Android Auto, and open DriveCast from the Android Auto App Launcher (not the dashboard audio card) to open the car video surface."
+                "App is sideloaded (${installer ?: "PackageInstaller"}). Android Auto 'Unknown sources' unlocks Media audio controls & Android 15+ Parked Activity, but Android Auto blocks sideloaded CarAppService video surfaces on real cars unless installed via Google Play Internal App Sharing / Internal Test Track."
             else ->
-                "CarAppService is ready and MediaSession is isolated from Android Auto audio hijacking. Open DriveCast from the Android Auto App Launcher to display video."
+                "All manifest, CarAppService, MediaSessionService, and Google Play trust checks passed."
         }
 
         val audit = CarVisibilityAudit(
@@ -243,8 +243,8 @@ object CarDiagnosticLogger {
         _state.update { it.copy(audit = audit) }
         log(
             source = "Audit",
-            message = "AA=$aaVersion | installer=${installer ?: "sideload"} | carMeta=$hasCarMeta | minApi=$minCarApi | carSvc=$carServiceOk | mediaIsolated=$mediaServiceOk | debuggable=$isDebuggable",
-            level = if (!isPlayStore || !hasCarMeta || !carServiceOk) DiagLevel.WARN else DiagLevel.INFO,
+            message = "AA=$aaVersion | installer=${installer ?: "sideload"} | carMeta=$hasCarMeta | minApi=$minCarApi | carSvc=$carServiceOk | mediaSvc=$mediaServiceOk | debuggable=$isDebuggable",
+            level = if (!isPlayStore || !hasCarMeta || !carServiceOk || !mediaServiceOk) DiagLevel.WARN else DiagLevel.INFO,
             context = appCtx
         )
         return audit
@@ -261,7 +261,7 @@ object CarDiagnosticLogger {
             appendLine("Debuggable Build: ${audit.isDebuggableBuild}")
             appendLine("Manifest car.application meta-data: ${audit.hasCarAppMetadata} | minCarApiLevel=${audit.minCarApiLevel}")
             appendLine("VideoDeckCarAppService Exported/Enabled: ${audit.carAppServiceEnabled}")
-            appendLine("VideoDeckPlaybackService Isolated (Unexported): ${audit.mediaServiceEnabled}")
+            appendLine("VideoDeckPlaybackService Exported/Enabled: ${audit.mediaServiceEnabled}")
             appendLine("Active Car Session: ${current.sessionActive} | Host=${current.connectedHostPackage ?: "None"} | CarAPI=${current.carApiLevel ?: "-"}")
             appendLine("Diagnosis: ${audit.likelyBlockerSummary}")
             appendLine()
